@@ -1,4 +1,5 @@
 import { CardSet, HighscoreEntry, PlayerStats } from '../types/memory';
+import { reportAppError } from './errorReporting';
 
 const CUSTOM_SETS_KEY = 'memomaster_custom_card_sets';
 const HIGHSCORES_KEY = 'memomaster_highscores';
@@ -63,7 +64,7 @@ export function getAllCardSets(): CardSet[] {
     localStorage.setItem(ALL_SETS_KEY, JSON.stringify(initial));
     return initial;
   } catch (err) {
-    console.error('Failed to load card sets:', err);
+    reportAppError(err, 'Kartensets aus dem Browserspeicher laden');
     return [];
   }
 }
@@ -90,7 +91,7 @@ export function saveCardSet(set: CardSet): boolean {
     localStorage.setItem(ALL_SETS_KEY, JSON.stringify(current));
     return true;
   } catch (err) {
-    console.error('Failed to save card set:', err);
+    reportAppError(err, 'Kartenset im Browserspeicher speichern');
     return false;
   }
 }
@@ -103,7 +104,7 @@ export function deleteCardSet(setId: string): boolean {
     localStorage.setItem(ALL_SETS_KEY, JSON.stringify(filtered));
     return true;
   } catch (err) {
-    console.error('Failed to delete card set:', err);
+    reportAppError(err, 'Kartenset aus dem Browserspeicher löschen');
     return false;
   }
 }
@@ -207,7 +208,8 @@ export function getCustomCardSets(): CardSet[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
-  } catch {
+  } catch (error) {
+    reportAppError(error, 'Kartensets aus dem Browserspeicher wiederherstellen');
     return [];
   }
 }
@@ -271,7 +273,8 @@ export function getHighscores(): HighscoreEntry[] {
     }
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
-  } catch {
+  } catch (error) {
+    reportAppError(error, 'Bestenliste laden');
     return [];
   }
 }
@@ -289,8 +292,8 @@ export function saveHighscore(entry: Omit<HighscoreEntry, 'id'>): HighscoreEntry
   const trimmed = scores.slice(0, 50);
   try {
     localStorage.setItem(HIGHSCORES_KEY, JSON.stringify(trimmed));
-  } catch {
-    // ignore
+  } catch (error) {
+    reportAppError(error, 'Bestenliste speichern');
   }
   return fullEntry;
 }
@@ -313,7 +316,8 @@ export function getPlayerStats(): PlayerStats {
       };
     }
     return JSON.parse(raw);
-  } catch {
+  } catch (error) {
+    reportAppError(error, 'Spielstatistik laden');
     return {
       gamesPlayed: 0,
       gamesWon: 0,
@@ -337,8 +341,8 @@ export function recordGameStats(win: boolean, timeSec: number, moves: number, ma
   current.favoriteSetId = setId;
   try {
     localStorage.setItem(STATS_KEY, JSON.stringify(current));
-  } catch {
-    // ignore
+  } catch (error) {
+    reportAppError(error, 'Spielstatistik speichern');
   }
 }
 

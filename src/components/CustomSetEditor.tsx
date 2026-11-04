@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { CardPair, CardSet, CardContentType, CardProperty } from '../types/memory';
 import { optimizeUploadedImage } from '../utils/storage';
+import { reportAppError } from '../utils/errorReporting';
 import {
   Upload,
   Plus,
@@ -139,7 +140,7 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
       }));
       setPairs((prev) => [...prev, ...newPairs]);
     } catch (err) {
-      console.error('Error processing images:', err);
+      reportAppError(err, 'Hochgeladene Bilder verarbeiten');
     }
   };
 
@@ -238,7 +239,7 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
             type: 'image',
           });
         } catch (err) {
-          console.error(err);
+          reportAppError(err, 'Bild in Karteneigenschaft verarbeiten');
         }
       }
     }

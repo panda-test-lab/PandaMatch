@@ -41,6 +41,7 @@ import {
   isRemovedDemoSet,
 } from './utils/storage';
 import { sound } from './utils/sound';
+import { reportAppError } from './utils/errorReporting';
 import {
   acceptSuggestedSetsStorage,
   chooseSetsStorage,
@@ -186,6 +187,7 @@ export default function App() {
           setSetsStorageSetup(status);
         }
       } catch (error) {
+        reportAppError(error, 'Sets-Speicher konnte nicht eingerichtet werden');
         if (!cancelled) {
           setSetsStorageError(
             `Der Sets-Ordner konnte nicht eingerichtet werden: ${String(error)}`
@@ -206,6 +208,7 @@ export default function App() {
       const path = await acceptSuggestedSetsStorage();
       await finishSetsStorageSetup(path);
     } catch (error) {
+      reportAppError(error, 'Vorgeschlagener Sets-Ordner konnte nicht verwendet werden');
       setSetsStorageError(`Der vorgeschlagene Sets-Ordner konnte nicht verwendet werden: ${String(error)}`);
     } finally {
       setIsSettingUpSetsStorage(false);
@@ -218,6 +221,7 @@ export default function App() {
       const path = await chooseSetsStorage();
       if (path) await finishSetsStorageSetup(path);
     } catch (error) {
+      reportAppError(error, 'Ausgewählter Sets-Ordner konnte nicht verwendet werden');
       setSetsStorageError(`Der ausgewählte Sets-Ordner konnte nicht verwendet werden: ${String(error)}`);
     } finally {
       setIsSettingUpSetsStorage(false);
@@ -322,6 +326,7 @@ export default function App() {
   const handleSaveSet = (savedSet: CardSet) => {
     if (!saveCardSet(savedSet)) {
       setSetsStorageError('Das Kartenset konnte nicht im lokalen App-Speicher gespeichert werden.');
+      reportAppError('Das Kartenset konnte nicht im lokalen App-Speicher gespeichert werden.', 'Kartenset speichern');
       return;
     }
     const updated = getAllCardSets();
@@ -333,8 +338,10 @@ export default function App() {
     if (isTauriApp() && setsStoragePath) {
       void writeSavedSet(savedSet).then(
         () => setSetsStorageError(null),
-        (error: unknown) =>
+        (error: unknown) => {
+          reportAppError(error, 'Kartenset-Datei konnte nicht gespeichert werden');
           setSetsStorageError(`Das Set konnte nicht im Sets-Ordner gespeichert werden: ${String(error)}`)
+        }
       );
     }
   };
@@ -349,8 +356,10 @@ export default function App() {
     if (isTauriApp() && setsStoragePath) {
       void deleteSavedSet(setId).then(
         () => setSetsStorageError(null),
-        (error: unknown) =>
+        (error: unknown) => {
+          reportAppError(error, 'Kartenset-Datei konnte nicht gelöscht werden');
           setSetsStorageError(`Die Set-Datei konnte nicht aus dem Sets-Ordner entfernt werden: ${String(error)}`)
+        }
       );
     }
   };
@@ -369,8 +378,10 @@ export default function App() {
     if (isTauriApp() && setsStoragePath) {
       void Promise.all(imported.map((set) => writeSavedSet(set))).then(
         () => setSetsStorageError(null),
-        (error: unknown) =>
+        (error: unknown) => {
+          reportAppError(error, 'Importierte Kartensets konnten nicht gespeichert werden');
           setSetsStorageError(`Importierte Sets konnten nicht im Sets-Ordner gespeichert werden: ${String(error)}`)
+        }
       );
     }
   };

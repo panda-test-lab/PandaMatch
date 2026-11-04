@@ -1,4 +1,5 @@
 import { CardMastery, MasteryLevel, SelfAssessmentRating, SetMasteryProgress } from '../types/memory';
+import { reportAppError } from './errorReporting';
 
 const MASTERY_PREFIX = 'memomaster_mastery_';
 const GLOBAL_MASTERY_KEY = 'memomaster_mastery_global';
@@ -11,7 +12,8 @@ export function getGlobalMastery(): Record<string, CardMastery> {
     const raw = localStorage.getItem(GLOBAL_MASTERY_KEY);
     if (!raw) return {};
     return JSON.parse(raw) || {};
-  } catch {
+  } catch (error) {
+    reportAppError(error, 'Globalen Lernfortschritt laden');
     return {};
   }
 }
@@ -21,7 +23,7 @@ export function saveGlobalMastery(map: Record<string, CardMastery>) {
   try {
     localStorage.setItem(GLOBAL_MASTERY_KEY, JSON.stringify(map));
   } catch (err) {
-    console.error('Failed to save global mastery data:', err);
+    reportAppError(err, 'Globalen Lernfortschritt speichern');
   }
 }
 
@@ -31,7 +33,8 @@ export function getSetMastery(setId: string): Record<string, CardMastery> {
     const raw = localStorage.getItem(`${MASTERY_PREFIX}${setId}`);
     if (!raw) return {};
     return JSON.parse(raw) || {};
-  } catch {
+  } catch (error) {
+    reportAppError(error, 'Lernfortschritt des Sets laden');
     return {};
   }
 }
@@ -41,7 +44,7 @@ export function saveSetMastery(setId: string, masteryMap: Record<string, CardMas
   try {
     localStorage.setItem(`${MASTERY_PREFIX}${setId}`, JSON.stringify(masteryMap));
   } catch (err) {
-    console.error('Failed to save mastery data:', err);
+    reportAppError(err, 'Lernfortschritt des Sets speichern');
   }
 }
 
@@ -61,7 +64,7 @@ export function resetSetMastery(setId?: string) {
       }
     }
   } catch (err) {
-    console.error('Failed to reset mastery data:', err);
+    reportAppError(err, 'Lernfortschritt zurücksetzen');
   }
 }
 

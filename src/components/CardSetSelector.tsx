@@ -24,6 +24,7 @@ import {
   X
 } from 'lucide-react';
 import { canUseDrawingMode } from '../utils/drawingMode';
+import { reportAppError } from '../utils/errorReporting';
 
 interface CardSetSelectorProps {
   allSets: CardSet[];
@@ -80,6 +81,7 @@ export const CardSetSelector: React.FC<CardSetSelectorProps> = ({
           showNotice('success', `Kartenset wurde als eigenständige JSON-Datei exportiert: ${path}`);
         }
       } catch (error) {
+        reportAppError(error, 'Kartenset exportieren');
         showNotice('error', `Kartenset konnte nicht exportiert werden: ${String(error)}`);
       }
       return;
@@ -100,6 +102,7 @@ export const CardSetSelector: React.FC<CardSetSelectorProps> = ({
       if (!importedSets || importedSets.length === 0) return;
       processJsonImport(JSON.stringify(importedSets));
     } catch (error) {
+      reportAppError(error, 'Kartenset-Datei importieren');
       showNotice('error', `Kartenset-Datei konnte nicht importiert werden: ${String(error)}`);
     }
   };

@@ -3,15 +3,21 @@ use serde::Serialize;
 use serde_json::Value;
 use std::{
     fs::{self, OpenOptions},
-    io::Write,
+    io::{ErrorKind, Write},
     path::{Component, Path, PathBuf},
     sync::Mutex,
+    time::{SystemTime, UNIX_EPOCH},
 };
 use tauri::{Manager, State};
 use tauri_plugin_dialog::DialogExt;
 
 #[derive(Default)]
 struct SetsStorage(Mutex<Option<PathBuf>>);
+
+#[derive(Default)]
+struct ErrorLogLock(Mutex<()>);
+
+const ERROR_LOG_MAX_BYTES: u64 = 2 * 1024 * 1024;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -77,6 +83,62 @@ fn active_storage(storage: &SetsStorage) -> Result<PathBuf, String> {
         .map_err(|error| error.to_string())?
         .clone()
         .ok_or_else(|| "Der Sets-Speicherort wurde noch nicht eingerichtet.".to_string())
+}
+
+fn append_error_log(path: &Path, record: &Value) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    let should_rotate = match fs::metadata(path) {
+        Ok(metadata) => metadata.len() > ERROR_LOG_MAX_BYTES,
+        Err(error) if error.kind() == ErrorKind::NotFound => false,
+        Err(error) => return Err(error.to_string()),
+    };
+    if should_rotate {
+        let backup = path.with_extension("log.1");
+        if backup.exists() {
+            fs::remove_file(&backup).map_err(|error| error.to_string())?;
+        }
+        fs::rename(path, backup).map_err(|error| error.to_string())?;
+    }
+
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .map_err(|error| error.to_string())?;
+    serde_json::to_writer(&mut file, record).map_err(|error| error.to_string())?;
+    file.write_all(b"\n").map_err(|error| error.to_string())?;
+    file.sync_data().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn report_error(
+    app: tauri::AppHandle,
+    log_lock: State<'_, ErrorLogLock>,
+    context: String,
+    message: String,
+    stack: Option<String>,
+) -> Result<String, String> {
+    let _guard = log_lock.0.lock().map_err(|error| error.to_string())?;
+    let log_path = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?
+        .join("error.log");
+    let timestamp_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_millis();
+    let record = serde_json::json!({
+        "timestampUnixMs": timestamp_ms,
+        "context": context,
+        "message": message,
+        "stack": stack,
+    });
+
+    append_error_log(&log_path, &record)?;
+    Ok(log_path.display().to_string())
 }
 
 #[tauri::command]
@@ -623,6 +685,7 @@ fn export_set_to_file(set: Value, app: tauri::AppHandle) -> Result<Option<String
 pub fn run() {
     let builder = tauri::Builder::default()
         .manage(SetsStorage::default())
+        .manage(ErrorLogLock::default())
         .plugin(tauri_plugin_dialog::init());
     #[cfg(not(mobile))]
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
@@ -646,7 +709,8 @@ pub fn run() {
             write_saved_set,
             delete_saved_set,
             import_sets_from_files,
-            export_set_to_file
+            export_set_to_file,
+            report_error
         ])
         .run(tauri::generate_context!())
         .expect("error while building tauri application");
@@ -655,6 +719,42 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn error_log_appends_json_lines_and_rotates_large_logs() {
+        let root =
+            std::env::temp_dir().join(format!("pandamatch-error-log-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("temporary folder should be created");
+        let path = root.join("error.log");
+        let first = serde_json::json!({ "message": "first error" });
+        let second = serde_json::json!({ "message": "second error" });
+
+        append_error_log(&path, &first).expect("first error should be logged");
+        append_error_log(&path, &second).expect("second error should be logged");
+        let contents = fs::read_to_string(&path).expect("error log should be readable");
+        let lines: Vec<Value> = contents
+            .lines()
+            .map(|line| serde_json::from_str(line).expect("each line should be valid JSON"))
+            .collect();
+        assert_eq!(lines, vec![first.clone(), second]);
+
+        fs::write(&path, vec![b'x'; ERROR_LOG_MAX_BYTES as usize + 1])
+            .expect("large log should be written");
+        append_error_log(&path, &first).expect("large log should rotate");
+        assert!(path.with_extension("log.1").is_file());
+        assert_eq!(
+            serde_json::from_str::<Value>(
+                fs::read_to_string(&path)
+                    .expect("new log should be readable")
+                    .trim()
+            )
+            .expect("new log should contain a JSON record"),
+            first
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
 
     #[test]
     fn set_files_keep_media_separate_and_round_trip() {

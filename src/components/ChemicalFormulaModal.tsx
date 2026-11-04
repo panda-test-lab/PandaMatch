@@ -16,6 +16,7 @@ import {
   ChemicalCompoundInfo,
 } from '../utils/chemicalStructure';
 import { optimizeUploadedImage } from '../utils/storage';
+import { reportAppError } from '../utils/errorReporting';
 
 interface ChemicalFormulaModalProps {
   isOpen: boolean;
@@ -115,6 +116,7 @@ export const ChemicalFormulaModal: React.FC<ChemicalFormulaModalProps> = ({
             setPasteError(null);
             return;
           } catch (err) {
+            reportAppError(err, 'Zwischenablagebild verarbeiten');
             setPasteError('Fehler beim Verarbeiten des Screenshots.');
           }
         }
@@ -131,7 +133,8 @@ export const ChemicalFormulaModal: React.FC<ChemicalFormulaModalProps> = ({
         const dataUrl = await optimizeUploadedImage(files[0], 380);
         setPastedImage(dataUrl);
         setPasteError(null);
-      } catch {
+      } catch (error) {
+        reportAppError(error, 'Bilddatei laden');
         setPasteError('Fehler beim Laden der Bilddatei.');
       }
     }
