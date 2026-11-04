@@ -1,0 +1,6 @@
+{
+  "name": "PandaMatch - Lern- und Zuordnungsspiel",
+  "description": "PandaMatch - Lernen. Zuordnen. Verstehen. Interaktives Memory-Spiel mit anpassbaren Schwierigkeitsgraden, Dark & Light Mode, vorgefertigten Kartensets und Drag-and-Drop Editor.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

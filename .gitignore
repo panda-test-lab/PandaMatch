@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+src-tauri/target/
+__pycache__/
+*.pyc
+.env*
+*.key*
+*.pem
+*.p12
+*.pfx
+*.py
+*.bat
+
