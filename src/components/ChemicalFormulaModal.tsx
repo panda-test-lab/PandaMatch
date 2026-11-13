@@ -46,12 +46,19 @@ export const ChemicalFormulaModal: React.FC<ChemicalFormulaModalProps> = ({
   const [pasteError, setPasteError] = useState<string | null>(null);
   const [pastedImage, setPastedImage] = useState<string | null>(null);
   const pasteAreaRef = useRef<HTMLDivElement | null>(null);
+  const formulaInputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
+  const formulaSelectionRef = useRef({ start: initialContent.length, end: initialContent.length });
+
+  const replaceFormulaText = (value: string) => {
+    formulaSelectionRef.current = { start: value.length, end: value.length };
+    setInputText(value);
+  };
 
   // Sync initial content on open
   useEffect(() => {
     if (isOpen) {
       setPreviewDark(typeof document !== 'undefined' && document.documentElement.classList.contains('dark'));
-      setInputText(initialContent);
+      replaceFormulaText(initialContent);
       setInputDetails(initialDetails);
       setInputLabel(initialLabel);
       setPastedImage(initialContent.startsWith('data:image') ? initialContent : null);
@@ -91,14 +98,34 @@ export const ChemicalFormulaModal: React.FC<ChemicalFormulaModalProps> = ({
 
   // Handle preset compound selection
   const handleSelectPreset = (compound: ChemicalCompoundInfo) => {
-    setInputText(`\\chemfig{${compound.smiles}}`);
+    replaceFormulaText(`\\chemfig{${compound.smiles}}`);
     if (!inputLabel) setInputLabel(compound.name.split('(')[0].trim());
     if (!inputDetails) setInputDetails(`${compound.formula} · ${compound.category}`);
   };
 
   // Handle ring / group insertion
-  const handleInsertToken = (token: string) => {
-    setInputText((prev) => (prev ? `${prev} ${token}` : token));
+  const handleInsertToken = (token: string, cursorOffset = token.length) => {
+    const start = Math.min(formulaSelectionRef.current.start, inputText.length);
+    const end = Math.min(formulaSelectionRef.current.end, inputText.length);
+    const nextText = `${inputText.slice(0, start)}${token}${inputText.slice(end)}`;
+    const nextCursor = start + cursorOffset;
+    formulaSelectionRef.current = { start: nextCursor, end: nextCursor };
+    setInputText(nextText);
+    window.requestAnimationFrame(() => {
+      formulaInputRef.current?.focus();
+      formulaInputRef.current?.setSelectionRange(nextCursor, nextCursor);
+    });
+  };
+
+  const handleFormulaInputChange = (value: string, selectionStart: number, selectionEnd: number) => {
+    formulaSelectionRef.current = { start: selectionStart, end: selectionEnd };
+    setInputText(value);
+  };
+
+  const handleFormulaInputSelection = (input: HTMLInputElement | HTMLTextAreaElement) => {
+    const start = input.selectionStart ?? input.value.length;
+    const end = input.selectionEnd ?? input.value.length;
+    formulaSelectionRef.current = { start, end };
   };
 
   // Handle direct clipboard paste
@@ -251,7 +278,7 @@ export const ChemicalFormulaModal: React.FC<ChemicalFormulaModalProps> = ({
             }`}
           >
             <Sigma className="w-4 h-4" />
-            <span>LaTeX-Summenformeln</span>
+            <span>LaTeX & ChemFig</span>
           </button>
 
           <button
@@ -330,7 +357,19 @@ export const ChemicalFormulaModal: React.FC<ChemicalFormulaModalProps> = ({
                   <input
                     type="text"
                     value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
+                    ref={(element) => {
+                      formulaInputRef.current = element;
+                    }}
+                    onChange={(e) =>
+                      handleFormulaInputChange(
+                        e.target.value,
+                        e.target.selectionStart ?? e.target.value.length,
+                        e.target.selectionEnd ?? e.target.value.length,
+                      )
+                    }
+                    onSelect={(e) => handleFormulaInputSelection(e.currentTarget)}
+                    onClick={(e) => handleFormulaInputSelection(e.currentTarget)}
+                    onKeyUp={(e) => handleFormulaInputSelection(e.currentTarget)}
                     placeholder="z.B. \chemfig{*6(-=-=-=)} oder Aspirin oder CC(=O)Oc1ccccc1C(=O)O"
                     className="w-full px-3.5 py-2 text-xs sm:text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-200 dark:bg-slate-950 text-slate-950 dark:text-slate-50 placeholder:text-slate-600 dark:placeholder:text-slate-400 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
@@ -356,7 +395,7 @@ export const ChemicalFormulaModal: React.FC<ChemicalFormulaModalProps> = ({
                     <button
                       key={item.label}
                       type="button"
-                      onClick={() => setInputText(item.val)}
+                      onClick={() => replaceFormulaText(item.val)}
                       className="px-2 py-1 rounded-lg text-xs font-bold bg-slate-200 dark:bg-slate-950 hover:bg-emerald-100 dark:hover:bg-emerald-950 text-slate-950 dark:text-slate-200 border border-slate-300 dark:border-slate-800 cursor-pointer"
                     >
                       {item.label}
@@ -417,18 +456,66 @@ export const ChemicalFormulaModal: React.FC<ChemicalFormulaModalProps> = ({
             <div className="flex flex-col gap-4">
               <div>
                 <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
-                  LaTeX Math-Formel (KaTeX)
+                  LaTeX-Formel oder ChemFig-Struktur
                 </label>
-                <input
-                  type="text"
+                <textarea
+                  ref={(element) => {
+                    formulaInputRef.current = element;
+                  }}
+                  rows={2}
                   value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  placeholder="z.B. \mathrm{C_9H_8O_4} oder \mathrm{2\,H_2 + O_2 \rightarrow 2\,H_2O}"
-                  className="w-full px-3.5 py-2 text-xs sm:text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-200 dark:bg-slate-950 text-slate-950 dark:text-slate-50 placeholder:text-slate-600 dark:placeholder:text-slate-400 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  onChange={(e) =>
+                    handleFormulaInputChange(e.target.value, e.target.selectionStart, e.target.selectionEnd)
+                  }
+                  onSelect={(e) => {
+                    handleFormulaInputSelection(e.currentTarget);
+                  }}
+                  onClick={(e) => {
+                    handleFormulaInputSelection(e.currentTarget);
+                  }}
+                  onKeyUp={(e) => {
+                    handleFormulaInputSelection(e.currentTarget);
+                  }}
+                  placeholder="z.B. \mathrm{C_9H_8O_4} oder \chemfig{*6(-=-=-=)}"
+                  className="w-full px-3.5 py-2 text-xs sm:text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-200 dark:bg-slate-950 text-slate-950 dark:text-slate-50 placeholder:text-slate-600 dark:placeholder:text-slate-400 font-mono font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y"
                 />
+                <p className="mt-1 text-[11px] text-slate-600 dark:text-slate-400">
+                  Wähle eine Vorlage oder füge Bausteine an der Cursor- bzw. Markierungsposition ein. Für Formeln
+                  nutze etwa <code>\mathrm{'{H_2O}'}</code>, für Strukturformeln <code>\chemfig{'{...}'}</code>.
+                </p>
               </div>
 
-              {/* KaTeX Symbol Chips */}
+              <div>
+                <span className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+                  ChemFig-Vorlagen (werden an der Cursorposition eingefügt):
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { label: 'Benzol', val: '\\chemfig{*6(-=-=-=)}' },
+                    { label: 'Ethanol', val: '\\chemfig{H_3C-CH_2-OH}' },
+                    { label: 'Glycin', val: '\\chemfig{H_2N-CH_2-COOH}' },
+                    { label: '\\chemfig{}', val: '\\chemfig{}', cursorOffset: '\\chemfig{'.length },
+                  ].map((template) => (
+                    <button
+                      key={template.label}
+                      type="button"
+                      onClick={() => handleInsertToken(template.val, template.cursorOffset)}
+                      className="px-2 py-1 rounded-lg text-xs font-bold bg-slate-200 dark:bg-slate-950 hover:bg-emerald-100 dark:hover:bg-emerald-950 text-slate-950 dark:text-slate-200 border border-slate-300 dark:border-slate-800 font-mono cursor-pointer"
+                    >
+                      {template.label}
+                    </button>
+                  ))}
+                </div>
+                <a
+                  href="https://www.namsu.de/Extra/pakete/Chemfig/Chemfig.html"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1.5 inline-flex text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 hover:underline"
+                >
+                  Weitere ChemFig-Befehle und Beispiele
+                </a>
+              </div>
+
               <div>
                 <span className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1.5">
                   Formel-Symbole & Operatoren:
@@ -449,7 +536,12 @@ export const ChemicalFormulaModal: React.FC<ChemicalFormulaModalProps> = ({
                     <button
                       key={sym.label}
                       type="button"
-                      onClick={() => handleInsertToken(sym.val)}
+                      onClick={() =>
+                        handleInsertToken(
+                          sym.val,
+                          sym.val === '\\mathrm{}' ? sym.val.length - 1 : sym.val.length,
+                        )
+                      }
                       className="px-2 py-1 rounded-lg text-xs font-bold bg-slate-200 dark:bg-slate-950 hover:bg-emerald-100 dark:hover:bg-emerald-950 text-slate-950 dark:text-slate-200 border border-slate-300 dark:border-slate-800 font-mono cursor-pointer"
                     >
                       {sym.label}
