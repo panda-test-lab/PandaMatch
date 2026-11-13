@@ -681,6 +681,25 @@ fn export_set_to_file(set: Value, app: tauri::AppHandle) -> Result<Option<String
     Ok(Some(path.display().to_string()))
 }
 
+fn is_desktop_target() -> bool {
+    !cfg!(any(target_os = "android", target_os = "ios"))
+}
+
+#[tauri::command]
+fn is_desktop_app() -> bool {
+    is_desktop_target()
+}
+
+#[tauri::command]
+fn restart_app(app: tauri::AppHandle) -> Result<(), String> {
+    if !is_desktop_target() {
+        return Err(
+            "Ein App-Neustart über den Updater ist nur auf dem Desktop verfügbar.".to_string(),
+        );
+    }
+    app.restart()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
@@ -710,7 +729,9 @@ pub fn run() {
             delete_saved_set,
             import_sets_from_files,
             export_set_to_file,
-            report_error
+            report_error,
+            is_desktop_app,
+            restart_app
         ])
         .run(tauri::generate_context!())
         .expect("error while building tauri application");

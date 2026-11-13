@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "PandaMatch",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "identifier": "com.pandastudios.pandamatch",
   "build": {
     "frontendDist": "../dist",

@@ -14,7 +14,7 @@ Lernen muss sich nicht nach Pauken anfühlen! **PandaMatch** macht aus Begriffen
 
 ## So legst du los
 
-Lade den Installer für dein Gerät aus den [offiziellen Releases](https://github.com/panda-test-lab/PandaMatch/releases) herunter und installiere PandaMatch. Eine lokale npm-Installation ist für die normale Nutzung nicht erforderlich. Wähle anschließend im Hauptmenü einen Spiel- oder Lernmodus. Vor einer Runde kannst du das Kartenset und weitere Einstellungen festlegen. Wenn du eigene Inhalte nutzen möchtest, findest du unter **Kartensets** die Verwaltung zum Erstellen und Bearbeiten.
+Lade den Installer für dein Gerät aus den [offiziellen Releases](https://github.com/panda-test-lab/PandaMatch/releases) herunter und installiere PandaMatch. Die Desktop-App prüft beim Start auf Updates und fragt vor dem Download und der Installation nach; Android und iOS verwenden diesen internen Updater nicht. Eine lokale npm-Installation ist für die normale Nutzung nicht erforderlich. Wähle anschließend im Hauptmenü einen Spiel- oder Lernmodus. Vor einer Runde kannst du das Kartenset und weitere Einstellungen festlegen. Wenn du eigene Inhalte nutzen möchtest, findest du unter **Kartensets** die Verwaltung zum Erstellen und Bearbeiten.
 
 ## Kartensets erstellen und teilen
 

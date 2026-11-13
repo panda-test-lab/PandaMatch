@@ -42,6 +42,7 @@ import {
 } from './utils/storage';
 import { sound } from './utils/sound';
 import { reportAppError } from './utils/errorReporting';
+import { checkForAppUpdate } from './utils/appUpdater';
 import {
   acceptSuggestedSetsStorage,
   chooseSetsStorage,
@@ -149,6 +150,12 @@ export default function App() {
     if (!tourSeen) {
       setIsTourOpen(true);
     }
+  }, []);
+
+  useEffect(() => {
+    void checkForAppUpdate().catch((error: unknown) => {
+      reportAppError(error, 'Update-Prüfung fehlgeschlagen');
+    });
   }, []);
 
   const finishSetsStorageSetup = async (activePath: string) => {
