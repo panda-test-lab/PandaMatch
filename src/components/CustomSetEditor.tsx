@@ -30,6 +30,9 @@ const COMMON_EMOJIS = [
   '🍔', '🍣', '🍦', '🍩', '⚽', '🏀', '🏎️', '✈️', '⛵', '🏰'
 ];
 
+const isImageFile = (file: File) =>
+  file.type.startsWith('image/') || /\.(avif|bmp|gif|jpe?g|png|svg|webp)$/i.test(file.name);
+
 export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
   initialSet,
   onSave,
@@ -114,7 +117,7 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
 
   // Process dropped/selected files
   const handleFiles = async (files: FileList | File[]) => {
-    const imageFiles = Array.from(files).filter((file) => file.type.startsWith('image/'));
+    const imageFiles = Array.from(files).filter(isImageFile);
     if (imageFiles.length === 0) return;
 
     try {
@@ -146,6 +149,7 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     setIsDraggingOverZone(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       handleFiles(e.dataTransfer.files);
@@ -231,7 +235,7 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
     e.stopPropagation();
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const file = e.dataTransfer.files[0];
-      if (file.type.startsWith('image/')) {
+      if (isImageFile(file)) {
         try {
           const dataUrl = await optimizeUploadedImage(file, 260);
           handleUpdateProperty(pairIndex, propKey, {
@@ -299,28 +303,35 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
   };
 
   return (
-    <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-6">
+    <div
+      className="w-full min-w-0 max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6 flex flex-col gap-4 sm:gap-6"
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes('Files')) e.preventDefault();
+      }}
+      onDrop={handleDrop}
+    >
       {/* Top Header / Back Button */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 min-w-0">
+        <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={onCancel}
             aria-label="Zurück zur Übersicht"
+            type="button"
             className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white break-words">
               {initialSet ? 'Kartenset bearbeiten' : 'Eigenes Multi-Eigenschaften-Set erstellen'}
             </h1>
-            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 break-words">
               Definiere 2, 3 oder 4 Eigenschaften pro Karte (z.B. Strukturformel, Wirkstoffname, Klasse, Indikation)
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
           <button
             onClick={handleSave}
             disabled={pairs.length === 0}
@@ -350,7 +361,7 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
       )}
 
       {/* Set Details Form */}
-      <div className="p-5 rounded-3xl bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="p-4 sm:p-5 rounded-3xl bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-800 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <div>
           <label className="block text-xs font-bold text-slate-900 dark:text-slate-300 mb-1">
             Name des Kartensets
@@ -383,8 +394,27 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
             type="text"
             value={icon}
             onChange={(e) => setIcon(e.target.value.slice(0, 3))}
+            aria-label="Kartenset-Icon"
             className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-200 dark:bg-slate-950 text-slate-950 dark:text-white placeholder:text-slate-600 dark:placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
           />
+          <div className="mt-2 grid grid-cols-6 gap-1.5" role="group" aria-label="Vorgeschlagene Icons">
+            {COMMON_EMOJIS.map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                onClick={() => setIcon(emoji)}
+                aria-label={`Icon ${emoji} auswählen`}
+                aria-pressed={icon === emoji}
+                className={`h-9 rounded-lg border text-xl transition-colors cursor-pointer ${
+                  icon === emoji
+                    ? 'border-emerald-500 bg-emerald-100 dark:bg-emerald-950/70'
+                    : 'border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-950 hover:border-emerald-500'
+                }`}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -473,6 +503,7 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
       {/* Global Drag & Drop Zone */}
       <div
         onDragOver={(e) => {
+          if (!e.dataTransfer.types.includes('Files')) return;
           e.preventDefault();
           setIsDraggingOverZone(true);
         }}
@@ -544,7 +575,7 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
           >
             {/* Concept Title & Actions */}
             <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800/80">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
                 <span className="w-6 text-center font-mono text-xs font-bold text-slate-500 dark:text-slate-400">
                   #{idx + 1}
                 </span>
@@ -560,7 +591,7 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
                     });
                   }}
                   placeholder="Titel des Konzepts (z.B. Acetylsalicylsäure)"
-                  className="text-sm font-extrabold text-slate-950 dark:text-white bg-slate-200 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1 min-w-[220px] placeholder:text-slate-600 dark:placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full min-w-0 text-sm font-extrabold text-slate-950 dark:text-white bg-slate-200 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1 placeholder:text-slate-600 dark:placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
 
@@ -575,7 +606,7 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
             </div>
 
             {/* Properties Grid */}
-            <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-${Math.min(4, availableProperties.length)} gap-3`}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               {availableProperties.map((pMeta) => {
                 const prop = pair.properties?.[pMeta.key] || {
                   id: `${pair.id}_${pMeta.key}`,
@@ -593,11 +624,11 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
                     className="p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 flex flex-col gap-2 relative group"
                   >
                     <div className="text-[11px] font-bold text-emerald-950 dark:text-emerald-300 flex items-center justify-between">
-                      <span className="truncate">{pMeta.label}</span>
+                      <span className="min-w-0 flex-1 break-words">{pMeta.label}</span>
                       <button
                         type="button"
                         onClick={() => setModalTarget({ pairIdx: idx, propKey: pMeta.key })}
-                        className="flex items-center gap-1 text-[10px] font-extrabold text-emerald-950 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950 px-2 py-0.5 rounded-lg border border-emerald-300 dark:border-emerald-800 hover:bg-emerald-200 dark:hover:bg-emerald-900 transition-colors cursor-pointer shadow-xs"
+                        className="flex items-center gap-1 text-[10px] font-extrabold text-emerald-950 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950 px-2 py-0.5 rounded-lg border border-emerald-300 dark:border-emerald-800 hover:bg-emerald-200 dark:hover:bg-emerald-900 transition-colors cursor-pointer shadow-xs shrink-0"
                         title="Formel-Assistent für Strukturformeln, LaTeX oder Screenshots öffnen"
                       >
                         <FlaskConical className="w-3 h-3" />
@@ -606,10 +637,10 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
                     </div>
 
                     {/* Preview Box */}
-                    <div className="w-full aspect-[4/3] rounded-xl bg-slate-200 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 flex items-center justify-center p-2 overflow-hidden shadow-inner text-center">
+                    <div className="custom-set-preview w-full min-h-28 sm:min-h-36 aspect-[4/3] rounded-xl bg-slate-200 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 flex items-center justify-center p-2 overflow-hidden shadow-inner text-center">
                       {prop.type === 'latex' ? (
-                        <div className="w-full flex items-center justify-center p-1 text-slate-950 dark:text-white">
-                          <LatexRenderer latex={prop.content || '\\text{LaTeX-Vorschau}'} displayMode={true} className="text-sm sm:text-base max-w-full" />
+                        <div className="w-full max-w-full max-h-full overflow-auto flex items-center justify-center p-1 text-slate-950 dark:text-white">
+                          <LatexRenderer latex={prop.content || '\\text{LaTeX-Vorschau}'} displayMode={true} className="text-sm sm:text-base max-w-full break-words" />
                         </div>
                       ) : prop.type === 'svg' ? (
                         <div
@@ -625,7 +656,7 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
                       ) : prop.type === 'emoji' ? (
                         <span className="text-3xl select-none">{prop.content}</span>
                       ) : (
-                        <span className="text-xs sm:text-sm font-extrabold text-slate-950 dark:text-white line-clamp-3">
+                        <span className="max-w-full max-h-full overflow-y-auto whitespace-pre-wrap break-words text-xs sm:text-sm font-extrabold text-slate-950 dark:text-white">
                           {prop.content || 'Leer'}
                         </span>
                       )}

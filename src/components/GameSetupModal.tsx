@@ -15,7 +15,8 @@ import {
   Info,
   Dice5,
   Eye,
-  LayoutGrid
+  LayoutGrid,
+  Shuffle,
 } from 'lucide-react';
 
 export interface GameSetupConfig {
@@ -35,6 +36,7 @@ interface GameSetupModalProps {
     boardDisplayMode: BoardDisplayMode;
     gameVariant: GameVariant;
     gameMode: GameMode;
+    shuffleCards: boolean;
     versusPlayer1Name?: string;
     versusPlayer2Name?: string;
   }) => void;
@@ -52,6 +54,7 @@ interface GameSetupModalContentProps {
     boardDisplayMode: BoardDisplayMode;
     gameVariant: GameVariant;
     gameMode: GameMode;
+    shuffleCards: boolean;
     versusPlayer1Name?: string;
     versusPlayer2Name?: string;
   }) => void;
@@ -79,6 +82,7 @@ const GameSetupModalContent: React.FC<GameSetupModalContentProps> = ({
   const [gameMode, setGameMode] = useState<GameMode>('solo');
   const [player1Name, setPlayer1Name] = useState<string>('Spieler 1');
   const [player2Name, setPlayer2Name] = useState<string>('Spieler 2');
+  const [shuffleCards, setShuffleCards] = useState(true);
 
   // Currently selected CardSet objects
   const selectedSets = useMemo(() => {
@@ -227,6 +231,7 @@ const GameSetupModalContent: React.FC<GameSetupModalContentProps> = ({
       boardDisplayMode,
       gameVariant,
       gameMode,
+      shuffleCards,
       versusPlayer1Name: player1Name.trim() || 'Spieler 1',
       versusPlayer2Name: player2Name.trim() || 'Spieler 2',
     });
@@ -701,6 +706,24 @@ const GameSetupModalContent: React.FC<GameSetupModalContentProps> = ({
               </div>
             )}
           </div>
+
+          <label className="flex items-start gap-2.5 rounded-xl border border-slate-300 dark:border-slate-800 bg-slate-100 dark:bg-slate-950 p-3 text-xs text-slate-800 dark:text-slate-200 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={shuffleCards}
+              onChange={(e) => setShuffleCards(e.target.checked)}
+              className="mt-0.5 accent-emerald-600"
+            />
+            <span className="flex items-start gap-2">
+              <Shuffle className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span>
+                <span className="block font-bold">Karten zufällig anordnen</span>
+                <span className="block text-[11px] text-slate-600 dark:text-slate-400">
+                  Bei jedem Start wird die Kartenreihenfolge neu gemischt.
+                </span>
+              </span>
+            </span>
+          </label>
         </div>
 
         {/* Modal Footer */}

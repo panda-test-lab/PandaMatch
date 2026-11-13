@@ -26,5 +26,8 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noEmit": true
-  }
+  },
+  "exclude": [
+    "src-tauri/target"
+  ]
 }

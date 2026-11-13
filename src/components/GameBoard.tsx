@@ -39,6 +39,7 @@ interface GameBoardProps {
   customPairsCount?: number;
   gameVariant?: GameVariant;
   initialActiveProperties?: string[];
+  shuffleCards?: boolean;
   versusPlayer1Name?: string;
   versusPlayer2Name?: string;
   initialActivePlayer?: 1 | 2;
@@ -54,6 +55,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
   customPairsCount,
   gameVariant = 'open',
   initialActiveProperties,
+  shuffleCards = true,
   versusPlayer1Name = 'Spieler 1',
   versusPlayer2Name = 'Spieler 2',
   initialActivePlayer = 1,
@@ -175,6 +177,12 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     // 1. Spaced Repetition Sampling:
     // Items with mistakes/uncertainties appear significantly more often!
     const selectedConcepts = sampleWeightedConcepts(rawPairs, totalConceptsRequired, cardSet.id);
+    if (!shuffleCards) {
+      const pairOrder = new Map(rawPairs.map((pair, index) => [pair.id, index]));
+      selectedConcepts.sort(
+        (a, b) => (pairOrder.get(a.id) ?? 0) - (pairOrder.get(b.id) ?? 0)
+      );
+    }
 
     // 2. Generate cards for each active property
     const generatedCards: CardItem[] = [];
@@ -236,10 +244,11 @@ export const GameBoard: React.FC<GameBoardProps> = ({
       });
     });
 
-    // Fisher-Yates shuffle
-    for (let i = generatedCards.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [generatedCards[i], generatedCards[j]] = [generatedCards[j], generatedCards[i]];
+    if (shuffleCards) {
+      for (let i = generatedCards.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [generatedCards[i], generatedCards[j]] = [generatedCards[j], generatedCards[i]];
+      }
     }
 
     setCards(generatedCards);
@@ -256,7 +265,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     setPlayer1Score(0);
     setPlayer2Score(0);
     setZoomedCard(null);
-  }, [cardSet, totalConceptsRequired, activePropertyKeys, availableProps, initialActivePlayer]);
+  }, [cardSet, totalConceptsRequired, activePropertyKeys, availableProps, initialActivePlayer, shuffleCards]);
 
   // Restart whenever cardSet, difficulty, activePropertyKeys, or boardDisplayMode changes
   useEffect(() => {

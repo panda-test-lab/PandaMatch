@@ -30,6 +30,7 @@ Auf Android und iOS speichert PandaMatch Sets im privaten App-Datenordner unter 
 
 Set- und Bilderordner werden bei Bedarf automatisch angelegt. LaTeX-Formeln bleiben als Code im Set gespeichert und werden direkt gerendert – dafür werden keine Formelbilder oder zusätzlichen `LaTeX/`-Ordner erstellt.
 
+
 ## Hinweise zur Installation unter Android und macOS
 
 Beim ersten Start kann Android oder macOS eine Sicherheitswarnung anzeigen. PandaMatch wird außerhalb der offiziellen Stores verteilt; deshalb kann das System die Herkunft der App nicht wie bei einer Store-App bestätigen. Eine solche Warnung allein bedeutet nicht, dass PandaMatch defekt oder beschädigt ist. Lade die App nur aus den offiziellen [PandaMatch-Releases](https://github.com/panda-test-lab/PandaMatch/releases) herunter und nimm Sicherheitsmeldungen ernst.

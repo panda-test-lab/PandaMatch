@@ -96,6 +96,7 @@ export default function App() {
   const [activeProperties, setActiveProperties] = useState<string[]>([]);
   const [gameMode, setGameMode] = useState<GameMode>('solo');
   const [boardDisplayMode, setBoardDisplayMode] = useState<BoardDisplayMode>('classic');
+  const [shuffleCards, setShuffleCards] = useState(true);
   const [gameKey, setGameKey] = useState<number>(1);
 
   // Leaderboard & Stats
@@ -296,6 +297,7 @@ export default function App() {
     boardDisplayMode: BoardDisplayMode;
     gameVariant: GameVariant;
     gameMode: GameMode;
+    shuffleCards: boolean;
     versusPlayer1Name?: string;
     versusPlayer2Name?: string;
   }) => {
@@ -305,6 +307,7 @@ export default function App() {
     setBoardDisplayMode(params.boardDisplayMode);
     setGameVariant(params.gameVariant);
     setGameMode(params.gameMode);
+    setShuffleCards(params.shuffleCards);
     if (params.versusPlayer1Name) setVersusPlayer1Name(params.versusPlayer1Name);
     if (params.versusPlayer2Name) setVersusPlayer2Name(params.versusPlayer2Name);
     setVersusStartingPlayer(1);
@@ -461,7 +464,7 @@ export default function App() {
         {/* 2. Spielbrett (Klassisch oder Offener Lernmodus) */}
         {activeTab === 'game' && (
           <GameBoard
-            key={`game-${gameKey}-${activeCardSet.id}-${customPairsCount}-${gameMode}-${boardDisplayMode}`}
+            key={`game-${gameKey}-${activeCardSet.id}-${customPairsCount}-${gameMode}-${boardDisplayMode}-${shuffleCards}`}
             cardSet={activeCardSet}
             difficulty={difficulty}
             customPairsCount={customPairsCount}
@@ -469,6 +472,7 @@ export default function App() {
             initialActiveProperties={activeProperties.length >= 2 ? activeProperties : undefined}
             gameMode={gameMode}
             boardDisplayMode={boardDisplayMode}
+            shuffleCards={shuffleCards}
             versusPlayer1Name={versusPlayer1Name}
             versusPlayer2Name={versusPlayer2Name}
             initialActivePlayer={versusStartingPlayer}

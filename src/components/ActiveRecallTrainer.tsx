@@ -13,6 +13,7 @@ import {
   Award,
   ZoomIn,
   ArrowRight,
+  Shuffle,
 } from 'lucide-react';
 
 interface ActiveRecallTrainerProps {
@@ -62,6 +63,7 @@ export const ActiveRecallTrainer: React.FC<ActiveRecallTrainerProps> = ({
 
   const [promptKey, setPromptKey] = useState<string>(() => availableProperties[0].key);
   const [targetKey, setTargetKey] = useState<string>(() => availableProperties[1].key);
+  const [shuffleCards, setShuffleCards] = useState(true);
 
   // Target options: Exclude the currently selected promptKey so "Gegeben" and "Gesucht" are NEVER identical
   const targetOptions = useMemo(() => {
@@ -150,6 +152,16 @@ export const ActiveRecallTrainer: React.FC<ActiveRecallTrainerProps> = ({
       };
     });
 
+    if (shuffleCards) {
+      for (let i = steps.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [steps[i], steps[j]] = [steps[j], steps[i]];
+      }
+    } else {
+      const pairOrder = new Map(rawPairs.map((pair, index) => [pair.id, index]));
+      steps.sort((a, b) => (pairOrder.get(a.conceptId) ?? 0) - (pairOrder.get(b.conceptId) ?? 0));
+    }
+
     setDeck(steps);
     setCurrentIndex(0);
     setSelectedChoiceId(null);
@@ -159,7 +171,7 @@ export const ActiveRecallTrainer: React.FC<ActiveRecallTrainerProps> = ({
 
   useEffect(() => {
     initSession();
-  }, [cardSet, promptKey, targetKey]);
+  }, [cardSet, promptKey, targetKey, shuffleCards]);
 
   const currentItem = deck[currentIndex];
   const summary = getSetMasterySummary(
@@ -320,6 +332,17 @@ export const ActiveRecallTrainer: React.FC<ActiveRecallTrainerProps> = ({
           </div>
         </div>
       )}
+
+      <label className="flex items-center gap-2.5 self-start rounded-xl border border-slate-300 dark:border-slate-800 bg-slate-100 dark:bg-slate-950 px-3 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={shuffleCards}
+          onChange={(e) => setShuffleCards(e.target.checked)}
+          className="accent-emerald-600"
+        />
+        <Shuffle className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+        <span>Zufällige Kartenreihenfolge</span>
+      </label>
 
       {/* Finished Summary or Active Card */}
       {isSessionFinished ? (
