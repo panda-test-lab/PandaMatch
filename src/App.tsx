@@ -340,13 +340,14 @@ export default function App() {
       return;
     }
     const updated = getAllCardSets();
+    const persistedSet = updated.find((set) => set.id === savedSet.id) || savedSet;
     setAllSets(updated);
     if (activeCardSet.id === savedSet.id) {
-      setActiveCardSet(savedSet);
+      setActiveCardSet(persistedSet);
     }
     setEditingSet(null);
     if (isTauriApp() && setsStoragePath) {
-      void writeSavedSet(savedSet).then(
+      void writeSavedSet(persistedSet).then(
         () => setSetsStorageError(null),
         (error: unknown) => {
           reportAppError(error, 'Kartenset-Datei konnte nicht gespeichert werden');

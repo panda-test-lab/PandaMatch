@@ -1,15 +1,20 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde::Serialize;
 use serde_json::Value;
+use sha1::{Digest, Sha1};
 use std::{
     fs::{self, OpenOptions},
-    io::{ErrorKind, Write},
+    io::{Cursor, ErrorKind, Read, Write},
     path::{Component, Path, PathBuf},
-    sync::Mutex,
+    sync::{
+        Mutex,
+        atomic::{AtomicU64, Ordering},
+    },
     time::{SystemTime, UNIX_EPOCH},
 };
 use tauri::{Manager, State};
 use tauri_plugin_dialog::DialogExt;
+use zip::{CompressionMethod, ZipArchive, ZipWriter, write::SimpleFileOptions};
 
 #[derive(Default)]
 struct SetsStorage(Mutex<Option<PathBuf>>);
@@ -18,6 +23,9 @@ struct SetsStorage(Mutex<Option<PathBuf>>);
 struct ErrorLogLock(Mutex<()>);
 
 const ERROR_LOG_MAX_BYTES: u64 = 2 * 1024 * 1024;
+const MAX_SET_ARCHIVE_BYTES: u64 = 100 * 1024 * 1024;
+const MAX_SET_ARCHIVE_ENTRIES: usize = 512;
+static TEMP_DIRECTORY_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -378,6 +386,49 @@ fn save_media(value: &mut Value, images_dir: &Path, index: &mut usize) -> Result
     Ok(())
 }
 
+struct TemporaryDirectory {
+    path: PathBuf,
+}
+
+impl Drop for TemporaryDirectory {
+    fn drop(&mut self) {
+        if let Err(error) = fs::remove_dir_all(&self.path) {
+            log::warn!(
+                "Temporärer PandaMatch-Ordner {} konnte nicht entfernt werden: {error}",
+                self.path.display()
+            );
+        }
+    }
+}
+
+fn create_temporary_directory(prefix: &str) -> Result<TemporaryDirectory, String> {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_nanos();
+    for _ in 0..10 {
+        let counter = TEMP_DIRECTORY_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "pandamatch-{prefix}-{}-{timestamp}-{counter}",
+            std::process::id()
+        ));
+        match fs::create_dir(&path) {
+            Ok(()) => return Ok(TemporaryDirectory { path }),
+            Err(error) if error.kind() == ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error.to_string()),
+        }
+    }
+    Err("Ein eindeutiger temporärer Ordner konnte nicht erstellt werden.".to_string())
+}
+
+fn git_blob_sha1(bytes: &[u8]) -> String {
+    let header = format!("blob {}\0", bytes.len());
+    let mut hasher = Sha1::new();
+    hasher.update(header.as_bytes());
+    hasher.update(bytes);
+    format!("{:x}", hasher.finalize())
+}
+
 fn hydrate_media(value: &mut Value, set_dir: &Path) -> Result<(), String> {
     match value {
         Value::Array(values) => {
@@ -455,6 +506,115 @@ fn read_imported_sets(path: &Path) -> Result<Vec<Value>, String> {
         Value::Array(sets) => Ok(sets),
         set => Ok(vec![set]),
     }
+}
+
+fn find_set_json_files(directory: &Path, output: &mut Vec<PathBuf>) -> Result<(), String> {
+    for entry in fs::read_dir(directory).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let file_type = entry.file_type().map_err(|error| error.to_string())?;
+        if file_type.is_dir() {
+            find_set_json_files(&entry.path(), output)?;
+        } else if file_type.is_file()
+            && entry
+                .file_name()
+                .to_string_lossy()
+                .eq_ignore_ascii_case("set.json")
+        {
+            output.push(entry.path());
+        }
+    }
+    Ok(())
+}
+
+fn read_imported_zip(path: &Path) -> Result<Vec<Value>, String> {
+    let metadata = fs::metadata(path).map_err(|error| error.to_string())?;
+    if metadata.len() > MAX_SET_ARCHIVE_BYTES {
+        return Err("Die ZIP-Datei ist größer als 100 MB.".to_string());
+    }
+    let bytes = fs::read(path).map_err(|error| error.to_string())?;
+    let archive_sha = git_blob_sha1(&bytes);
+    let archive_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("Kartenset.zip")
+        .to_string();
+    let temporary_directory = create_temporary_directory("import")?;
+    let mut archive = ZipArchive::new(Cursor::new(bytes))
+        .map_err(|error| format!("Ungültige ZIP-Datei: {error}"))?;
+    if archive.len() > MAX_SET_ARCHIVE_ENTRIES {
+        return Err(format!(
+            "Die ZIP-Datei enthält mehr als {MAX_SET_ARCHIVE_ENTRIES} Einträge."
+        ));
+    }
+
+    let mut extracted_bytes = 0_u64;
+    for index in 0..archive.len() {
+        let entry = archive
+            .by_index(index)
+            .map_err(|error| format!("ZIP-Eintrag konnte nicht gelesen werden: {error}"))?;
+        if entry.is_symlink() {
+            return Err("ZIP-Dateien mit symbolischen Links werden nicht importiert.".to_string());
+        }
+        let relative_path = entry
+            .enclosed_name()
+            .ok_or_else(|| "Die ZIP-Datei enthält einen unsicheren Pfad.".to_string())?;
+        if relative_path
+            .components()
+            .any(|component| !matches!(component, Component::Normal(_)))
+        {
+            return Err("Die ZIP-Datei enthält einen unsicheren Pfad.".to_string());
+        }
+        let declared_size = entry.size();
+        extracted_bytes = extracted_bytes
+            .checked_add(declared_size)
+            .filter(|size| *size <= MAX_SET_ARCHIVE_BYTES)
+            .ok_or_else(|| {
+                "Der entpackte Inhalt der ZIP-Datei ist größer als 100 MB.".to_string()
+            })?;
+        let destination = temporary_directory.path.join(relative_path);
+        if entry.is_dir() {
+            fs::create_dir_all(&destination).map_err(|error| error.to_string())?;
+            continue;
+        }
+        if let Some(parent) = destination.parent() {
+            fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+        }
+        let mut output = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&destination)
+            .map_err(|error| error.to_string())?;
+        let mut limited_entry = entry.take(declared_size.saturating_add(1));
+        let copied =
+            std::io::copy(&mut limited_entry, &mut output).map_err(|error| error.to_string())?;
+        if copied != declared_size {
+            return Err("Ein ZIP-Eintrag hat eine ungültige Dateigröße.".to_string());
+        }
+    }
+
+    let mut set_files = Vec::new();
+    find_set_json_files(&temporary_directory.path, &mut set_files)?;
+    if set_files.is_empty() {
+        return Err("In der ZIP-Datei wurde keine set.json gefunden.".to_string());
+    }
+
+    let mut imported = Vec::new();
+    for set_file in set_files {
+        for mut set in read_imported_sets(&set_file)? {
+            if let Some(object) = set.as_object_mut() {
+                object.insert(
+                    "sourceArchiveSha".to_string(),
+                    Value::String(archive_sha.clone()),
+                );
+                object.insert(
+                    "sourceArchiveName".to_string(),
+                    Value::String(archive_name.clone()),
+                );
+            }
+            imported.push(set);
+        }
+    }
+    Ok(imported)
 }
 
 fn remove_set_media(value: &Value, set_dir: &Path) -> Result<(), String> {
@@ -642,8 +802,8 @@ fn import_sets_from_files(app: tauri::AppHandle) -> Result<Option<Vec<Value>>, S
     let selected = app
         .dialog()
         .file()
-        .add_filter("PandaMatch-Kartensets", &["json"])
-        .set_title("Kartenset-Datei(en) importieren")
+        .add_filter("PandaMatch-Kartensets", &["json", "zip"])
+        .set_title("Kartensets (JSON oder ZIP) importieren")
         .blocking_pick_files();
     let Some(files) = selected else {
         return Ok(None);
@@ -651,9 +811,105 @@ fn import_sets_from_files(app: tauri::AppHandle) -> Result<Option<Vec<Value>>, S
     let mut imported = Vec::new();
     for file in files {
         let path = file.into_path().map_err(|error| error.to_string())?;
-        imported.extend(read_imported_sets(&path)?);
+        if path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("zip"))
+        {
+            imported.extend(read_imported_zip(&path)?);
+        } else {
+            imported.extend(read_imported_sets(&path)?);
+        }
     }
     Ok(Some(imported))
+}
+
+fn append_directory_to_zip(
+    writer: &mut ZipWriter<Cursor<Vec<u8>>>,
+    root: &Path,
+    current: &Path,
+    archive_root: &str,
+) -> Result<(), String> {
+    let mut entries = fs::read_dir(current)
+        .map_err(|error| error.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
+    entries.sort_by_key(|entry| entry.file_name());
+
+    for entry in entries {
+        let path = entry.path();
+        let relative = path
+            .strip_prefix(root)
+            .map_err(|error| error.to_string())?
+            .to_string_lossy()
+            .replace('\\', "/");
+        let archive_path = format!("{archive_root}/{relative}");
+        let file_type = entry.file_type().map_err(|error| error.to_string())?;
+        if file_type.is_dir() {
+            writer
+                .add_directory(
+                    format!("{archive_path}/"),
+                    SimpleFileOptions::default().compression_method(CompressionMethod::Deflated),
+                )
+                .map_err(|error| error.to_string())?;
+            append_directory_to_zip(writer, root, &path, archive_root)?;
+        } else if file_type.is_file() {
+            writer
+                .start_file(
+                    archive_path,
+                    SimpleFileOptions::default().compression_method(CompressionMethod::Deflated),
+                )
+                .map_err(|error| error.to_string())?;
+            writer
+                .write_all(&fs::read(path).map_err(|error| error.to_string())?)
+                .map_err(|error| error.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+fn build_set_archive(set: &Value) -> Result<Vec<u8>, String> {
+    let title = set
+        .get("title")
+        .and_then(Value::as_str)
+        .unwrap_or("Kartenset");
+    let archive_root = safe_component(title);
+    let temporary_directory = create_temporary_directory("export")?;
+    let mut packaged_set = set.clone();
+    if let Some(object) = packaged_set.as_object_mut() {
+        object.remove("sourceArchiveSha");
+        object.remove("sourceArchiveName");
+        object.remove("sourceRepoPath");
+    }
+    let mut media_index = 0;
+    save_media(
+        &mut packaged_set,
+        &temporary_directory.path.join("Bilder"),
+        &mut media_index,
+    )?;
+    fs::write(
+        temporary_directory.path.join("set.json"),
+        serde_json::to_vec_pretty(&packaged_set).map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| error.to_string())?;
+
+    let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
+    writer
+        .add_directory(
+            format!("{archive_root}/"),
+            SimpleFileOptions::default().compression_method(CompressionMethod::Deflated),
+        )
+        .map_err(|error| error.to_string())?;
+    append_directory_to_zip(
+        &mut writer,
+        &temporary_directory.path,
+        &temporary_directory.path,
+        &archive_root,
+    )?;
+    writer
+        .finish()
+        .map(|cursor| cursor.into_inner())
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -665,19 +921,22 @@ fn export_set_to_file(set: Value, app: tauri::AppHandle) -> Result<Option<String
     let Some(path) = app
         .dialog()
         .file()
-        .add_filter("PandaMatch-Kartenset", &["json"])
-        .set_file_name(format!("{}.json", safe_component(title)))
-        .set_title("Kartenset exportieren")
+        .add_filter("PandaMatch-Kartenset", &["zip"])
+        .set_file_name(format!("{}.zip", safe_component(title)))
+        .set_title("Kartenset als ZIP exportieren")
         .blocking_save_file()
     else {
         return Ok(None);
     };
-    let path = path.into_path().map_err(|error| error.to_string())?;
-    fs::write(
-        &path,
-        serde_json::to_vec_pretty(&set).map_err(|error| error.to_string())?,
-    )
-    .map_err(|error| error.to_string())?;
+    let mut path = path.into_path().map_err(|error| error.to_string())?;
+    if !path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("zip"))
+    {
+        path.set_extension("zip");
+    }
+    fs::write(&path, build_set_archive(&set)?).map_err(|error| error.to_string())?;
     Ok(Some(path.display().to_string()))
 }
 
@@ -705,7 +964,8 @@ pub fn run() {
     let builder = tauri::Builder::default()
         .manage(SetsStorage::default())
         .manage(ErrorLogLock::default())
-        .plugin(tauri_plugin_dialog::init());
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init());
     #[cfg(not(mobile))]
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
 
@@ -937,5 +1197,81 @@ mod tests {
             "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>"
         );
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn set_zip_export_and_import_preserve_folder_media_and_version_sha() {
+        let set = serde_json::json!({
+            "id": "zip-set",
+            "title": "ZIP Set",
+            "description": "Portable set",
+            "pairs": [{
+                "id": "pair-1",
+                "title": "Image pair",
+                "cardA": {
+                    "content": format!("data:image/webp;base64,{}", STANDARD.encode(b"image-bytes")),
+                    "type": "image"
+                },
+                "cardB": { "content": "Answer", "type": "text" }
+            }]
+        });
+        let bytes = build_set_archive(&set).expect("set should export as ZIP");
+        let mut archive =
+            ZipArchive::new(Cursor::new(bytes.clone())).expect("exported archive should open");
+        let mut set_file = String::new();
+        archive
+            .by_name("ZIP Set/set.json")
+            .expect("set.json should be inside a top-level set folder")
+            .read_to_string(&mut set_file)
+            .expect("set.json should be readable");
+        let exported: Value = serde_json::from_str(&set_file).expect("set.json should be valid");
+        let image_path = exported["pairs"][0]["cardA"]["content"]
+            .as_str()
+            .expect("image path should be serialized");
+        assert_eq!(image_path, "Bilder/grafik-0001.webp");
+        let mut image = Vec::new();
+        archive
+            .by_name(&format!("ZIP Set/{image_path}"))
+            .expect("image should be inside the archive")
+            .read_to_end(&mut image)
+            .expect("image should be readable");
+        assert_eq!(image, b"image-bytes");
+
+        let root =
+            create_temporary_directory("zip-test").expect("temporary directory should exist");
+        let archive_path = root.path.join("ZIP Set.zip");
+        fs::write(&archive_path, &bytes).expect("archive should be written");
+        let imported = read_imported_zip(&archive_path).expect("archive should import");
+        assert_eq!(imported.len(), 1);
+        assert_eq!(imported[0]["id"], "zip-set");
+        assert_eq!(
+            imported[0]["pairs"][0]["cardA"]["content"],
+            format!("data:image/webp;base64,{}", STANDARD.encode(b"image-bytes"))
+        );
+        assert_eq!(imported[0]["sourceArchiveSha"], git_blob_sha1(&bytes));
+        assert_eq!(imported[0]["sourceArchiveName"], "ZIP Set.zip");
+    }
+
+    #[test]
+    fn set_zip_import_rejects_parent_directory_paths() {
+        let outside_name = format!("outside-{}.txt", std::process::id());
+        let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
+        writer
+            .start_file(
+                format!("../{outside_name}"),
+                SimpleFileOptions::default().compression_method(CompressionMethod::Deflated),
+            )
+            .expect("archive entry should be added");
+        writer
+            .write_all(b"outside")
+            .expect("archive entry should be written");
+        let bytes = writer.finish().expect("archive should finish").into_inner();
+        let root =
+            create_temporary_directory("zip-path-test").expect("temporary directory should exist");
+        let archive_path = root.path.join("unsafe.zip");
+        fs::write(&archive_path, bytes).expect("archive should be written");
+
+        assert!(read_imported_zip(&archive_path).is_err());
+        assert!(!std::env::temp_dir().join(outside_name).exists());
     }
 }

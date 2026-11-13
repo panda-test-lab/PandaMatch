@@ -1,14 +1,15 @@
 import React, { useState, useRef } from 'react';
 import { CardSet } from '../types/memory';
 import {
-  exportCardSetJson,
   importCardSetsJson
 } from '../utils/storage';
+import { readSetArchive, writeSetArchive } from '../utils/setArchives';
 import {
   exportSetToFile,
   importSetsFromFiles,
   isTauriApp,
 } from '../utils/setFiles';
+import { RepoSetImportModal } from './RepoSetImportModal';
 import {
   Search,
   Plus,
@@ -19,6 +20,7 @@ import {
   Upload,
   Sparkles,
   FileJson,
+  CloudDownload,
   CheckCircle2,
   AlertCircle,
   X
@@ -52,6 +54,7 @@ export const CardSetSelector: React.FC<CardSetSelectorProps> = ({
   const [filterTab, setFilterTab] = useState<'all' | 'custom'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [importModalOpen, setImportModalOpen] = useState(false);
+  const [repoImportOpen, setRepoImportOpen] = useState(false);
   const [pastedJson, setPastedJson] = useState('');
   const [statusNotification, setStatusNotification] = useState<{
     type: 'success' | 'error';
@@ -78,7 +81,7 @@ export const CardSetSelector: React.FC<CardSetSelectorProps> = ({
       try {
         const path = await exportSetToFile(set);
         if (path) {
-          showNotice('success', `Kartenset wurde als eigenständige JSON-Datei exportiert: ${path}`);
+          showNotice('success', `Kartenset wurde als ZIP-Datei exportiert: ${path}`);
         }
       } catch (error) {
         reportAppError(error, 'Kartenset exportieren');
@@ -87,13 +90,18 @@ export const CardSetSelector: React.FC<CardSetSelectorProps> = ({
       return;
     }
 
-    const jsonStr = exportCardSetJson(set);
-    const filename = set.title
-      .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_')
-      .replace(/[. ]+$/g, '')
-      .trim() || 'Kartenset';
-    downloadJsonFile(jsonStr, `${filename}_set.json`);
-    showNotice('success', `Kartenset „${set.title}“ erfolgreich exportiert!`);
+    try {
+      const archive = writeSetArchive(set);
+      const filename = set.title
+        .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_')
+        .replace(/[. ]+$/g, '')
+        .trim() || 'Kartenset';
+      downloadArchiveFile(archive, `${filename}.zip`);
+      showNotice('success', `Kartenset „${set.title}“ als ZIP exportiert!`);
+    } catch (error) {
+      reportAppError(error, 'Kartenset exportieren');
+      showNotice('error', `Kartenset konnte nicht exportiert werden: ${String(error)}`);
+    }
   };
 
   const handleNativeImport = async () => {
@@ -107,8 +115,10 @@ export const CardSetSelector: React.FC<CardSetSelectorProps> = ({
     }
   };
 
-  const downloadJsonFile = (jsonString: string, filename: string) => {
-    const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8;' });
+  const downloadArchiveFile = (bytes: Uint8Array, filename: string) => {
+    const buffer = new ArrayBuffer(bytes.byteLength);
+    new Uint8Array(buffer).set(bytes);
+    const blob = new Blob([buffer], { type: 'application/zip' });
     const url = URL.createObjectURL(blob);
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute('href', url);
@@ -116,7 +126,7 @@ export const CardSetSelector: React.FC<CardSetSelectorProps> = ({
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
-    URL.revokeObjectURL(url);
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -124,6 +134,18 @@ export const CardSetSelector: React.FC<CardSetSelectorProps> = ({
     if (!files || files.length === 0) return;
 
     const file = files[0];
+    e.target.value = '';
+    if (file.name.toLowerCase().endsWith('.zip')) {
+      void file.arrayBuffer()
+        .then((buffer) => readSetArchive(new Uint8Array(buffer), { archiveName: file.name }))
+        .then((set) => processJsonImport(JSON.stringify(set)))
+        .catch((error: unknown) => {
+          reportAppError(error, 'Kartenset-ZIP importieren');
+          showNotice('error', `ZIP-Datei konnte nicht importiert werden: ${String(error)}`);
+        });
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = (evt) => {
       const text = evt.target?.result;
@@ -132,8 +154,6 @@ export const CardSetSelector: React.FC<CardSetSelectorProps> = ({
       }
     };
     reader.readAsText(file);
-    // Reset file input value
-    e.target.value = '';
   };
 
   const processJsonImport = (jsonText: string) => {
@@ -159,11 +179,11 @@ export const CardSetSelector: React.FC<CardSetSelectorProps> = ({
 
   return (
     <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-6 select-none">
-      {/* Hidden File Input for JSON Import */}
+      {/* Hidden File Input for JSON and ZIP imports */}
       <input
         ref={fileInputRef}
         type="file"
-        accept=".json,application/json"
+        accept=".json,application/json,.zip,application/zip"
         className="hidden"
         onChange={handleFileUpload}
       />
@@ -198,6 +218,15 @@ export const CardSetSelector: React.FC<CardSetSelectorProps> = ({
           >
             <Upload className="w-4 h-4 text-emerald-500" />
             <span>Set(s) importieren</span>
+          </button>
+
+          <button
+            onClick={() => setRepoImportOpen(true)}
+            title="ZIP-Kartensets aus dem PandaMatch_Sets-Repository anzeigen und herunterladen"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-sky-300 dark:border-sky-900 bg-sky-50 dark:bg-sky-950/50 hover:bg-sky-100 dark:hover:bg-sky-900 text-sky-900 dark:text-sky-100 text-xs font-bold transition-all cursor-pointer shadow-xs"
+          >
+            <CloudDownload className="w-4 h-4 text-sky-500" />
+            <span>Sets aus Repo</span>
           </button>
 
           {/* Direct JSON Paste Button */}
@@ -245,6 +274,17 @@ export const CardSetSelector: React.FC<CardSetSelectorProps> = ({
             <X className="w-4 h-4" />
           </button>
         </div>
+      )}
+
+      {repoImportOpen && (
+        <RepoSetImportModal
+          allSets={allSets}
+          onClose={() => setRepoImportOpen(false)}
+          onImportSuccess={(sets) => {
+            onImportSuccess?.(sets);
+            showNotice('success', `${sets.length} Set(s) aus PandaMatch_Sets importiert.`);
+          }}
+        />
       )}
 
       {/* Filter and Search Bar */}
@@ -438,10 +478,10 @@ export const CardSetSelector: React.FC<CardSetSelectorProps> = ({
 
                   {/* SET MANAGEMENT BUTTONS: EXPORT, EDIT, DELETE (For ALL sets!) */}
                   <div className="flex items-center gap-1 shrink-0">
-                    {/* Export JSON */}
+                    {/* Export ZIP */}
                     <button
                       onClick={() => handleExportSingleSet(set)}
-                      title="Dieses Set als eigenständige JSON-Datei mit allen Eigenschaften exportieren"
+                      title="Dieses Set mit Bildern als gepackte ZIP-Datei exportieren"
                       className="p-2 rounded-xl border border-slate-300 dark:border-slate-800 text-slate-600 hover:text-slate-950 dark:text-slate-400 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                     >
                       <Download className="w-3.5 h-3.5" />
@@ -492,7 +532,7 @@ export const CardSetSelector: React.FC<CardSetSelectorProps> = ({
               <div className="flex items-center gap-2">
                 <FileJson className="w-5 h-5 text-emerald-500" />
                 <h3 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white">
-                  Kartenset(s) im JSON-Format importieren
+                  Kartenset(s) als JSON oder ZIP importieren
                 </h3>
               </div>
               <button
@@ -504,7 +544,7 @@ export const CardSetSelector: React.FC<CardSetSelectorProps> = ({
             </div>
 
             <p className="mt-3 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              Füge hier den JSON-Code eines einzelnen Kartensets oder einer Liste von Kartensets ein. Alle definierten Eigenschaften (z.B. Strukturformel, Wirkstoffname, LaTeX-Code) werden vollständig übernommen.
+              Füge hier den JSON-Code ein oder wähle eine JSON- bzw. ZIP-Datei mit Set-Ordner und Bildern aus. Alle definierten Eigenschaften und Medien werden übernommen.
             </p>
 
             <textarea

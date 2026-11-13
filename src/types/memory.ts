@@ -44,6 +44,9 @@ export interface CardSet {
   availableProperties?: { key: string; label: string }[];
   isCustom?: boolean;
   createdAt?: string;
+  sourceArchiveSha?: string;
+  sourceArchiveName?: string;
+  sourceRepoPath?: string;
 }
 
 export interface CardItem {

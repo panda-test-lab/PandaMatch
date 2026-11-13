@@ -80,7 +80,14 @@ export function saveCardSet(set: CardSet): boolean {
     const current = getAllCardSets();
     const index = current.findIndex((s) => s.id === set.id);
     if (index >= 0) {
-      current[index] = { ...set, isCustom: true };
+      const existing = current[index];
+      current[index] = {
+        ...set,
+        isCustom: true,
+        sourceArchiveSha: set.sourceArchiveSha ?? existing.sourceArchiveSha,
+        sourceArchiveName: set.sourceArchiveName ?? existing.sourceArchiveName,
+        sourceRepoPath: set.sourceRepoPath ?? existing.sourceRepoPath,
+      };
     } else {
       current.unshift({
         ...set,
@@ -145,6 +152,9 @@ export function importCardSetsJson(jsonText: string): {
         color: raw.color || 'emerald',
         isCustom: true,
         availableProperties: Array.isArray(raw.availableProperties) ? raw.availableProperties : undefined,
+        sourceArchiveSha: typeof raw.sourceArchiveSha === 'string' ? raw.sourceArchiveSha : undefined,
+        sourceArchiveName: typeof raw.sourceArchiveName === 'string' ? raw.sourceArchiveName : undefined,
+        sourceRepoPath: typeof raw.sourceRepoPath === 'string' ? raw.sourceRepoPath : undefined,
         pairs: raw.pairs.map((p: any, pIdx: number) => ({
           id: p.id || `pair_${Date.now()}_${pIdx}`,
           title: String(p.title || `Konzept ${pIdx + 1}`),
@@ -169,6 +179,10 @@ export function importCardSetsJson(jsonText: string): {
 
       const existingIdx = current.findIndex((s) => s.id === cleanSet.id);
       if (existingIdx >= 0) {
+        const existing = current[existingIdx];
+        cleanSet.sourceArchiveSha ??= existing.sourceArchiveSha;
+        cleanSet.sourceArchiveName ??= existing.sourceArchiveName;
+        cleanSet.sourceRepoPath ??= existing.sourceRepoPath;
         current[existingIdx] = cleanSet;
       } else {
         current.unshift(cleanSet);

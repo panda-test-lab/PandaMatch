@@ -1,10 +1,15 @@
 import React from 'react';
 import { Heart } from 'lucide-react';
+import { isTauri } from '@tauri-apps/api/core';
+import { openUrl } from '@tauri-apps/plugin-opener';
+import { reportAppError } from '../utils/errorReporting';
 
 interface KoFiButtonProps {
   className?: string;
   variant?: 'compact' | 'standard';
 }
+
+const KOFI_URL = 'https://ko-fi.com/H0G826CZMP';
 
 export const KoFiButton: React.FC<KoFiButtonProps> = ({
   className = '',
@@ -12,11 +17,18 @@ export const KoFiButton: React.FC<KoFiButtonProps> = ({
 }) => {
   return (
     <a
-      href="https://ko-fi.com/H0G826CZMP"
+      href={KOFI_URL}
       target="_blank"
       rel="noopener noreferrer"
       title="Unterstütze meine Arbeit auf Ko-fi"
       aria-label="Unterstütze meine Arbeit auf Ko-fi"
+      onClick={(event) => {
+        if (!isTauri()) return;
+        event.preventDefault();
+        void openUrl(KOFI_URL).catch((error: unknown) => {
+          reportAppError(error, 'Ko-fi-Seite öffnen');
+        });
+      }}
       className={`inline-flex items-center gap-2 font-bold transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-sm hover:shadow cursor-pointer select-none ${
         variant === 'compact'
           ? 'px-3 py-1.5 rounded-xl text-xs'

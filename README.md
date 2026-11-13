@@ -18,7 +18,7 @@ Lade den Installer für dein Gerät aus den [offiziellen Releases](https://githu
 
 ## Kartensets erstellen und teilen
 
-Unter **Kartensets** kannst du Sets anlegen, bearbeiten, suchen und löschen. Jedes Set lässt sich einzeln als eigenständige JSON-Datei mit allen Eigenschaften exportieren. Du kannst einzelne Sets oder mehrere Sets importieren und exportieren; JSON-Code lässt sich auch direkt einfügen. Beim portablen Export sind die Bilder im Set enthalten. So kannst du Sets sichern oder mit anderen teilen.
+Unter **Kartensets** kannst du Sets anlegen, bearbeiten, suchen und löschen. Jedes Set lässt sich einzeln als ZIP-Datei mit `set.json` und dem zugehörigen `Bilder/`-Ordner exportieren. Diese ZIP-Dateien kannst du direkt wieder importieren und mit anderen teilen; JSON-Dateien und eingefügter JSON-Code werden weiterhin unterstützt. Über **Sets aus Repo** kannst du außerdem ZIP-Sets aus dem öffentlichen Repository **PandaMatch_Sets** anzeigen, herunterladen und bei einer neueren Repo-Version aktualisieren.
 
 Zusätzlich entsteht ein eigenes Repository namens **PandaFlow_Sets**, in dem ich selbst erstellte Kartensets anbieten werde. Das Repository ist noch in Arbeit und wird hier verlinkt, sobald es verfügbar ist.
 
