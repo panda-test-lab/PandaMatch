@@ -359,25 +359,25 @@ export const CardSetSelector: React.FC<CardSetSelectorProps> = ({
             return (
               <div
                 key={set.id}
-                className="flex flex-col justify-between rounded-2xl p-5 border overflow-hidden transition-all border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 hover:border-slate-400 dark:hover:border-slate-700 shadow-xs hover:shadow-sm"
+                className="@container flex min-w-0 flex-col justify-between overflow-hidden rounded-2xl border border-slate-300 bg-slate-50 p-3 transition-all shadow-xs hover:border-slate-400 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700 sm:p-5"
               >
                 <div>
                   {/* Top Bar with Icon, Title, and Badges */}
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex items-center justify-center text-2xl select-none shrink-0 shadow-xs">
+                  <div className="mb-2 flex min-w-0 flex-col gap-2 @sm:flex-row @sm:items-start @sm:justify-between">
+                    <div className="flex min-w-0 items-start gap-2 @sm:gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-slate-100 text-xl select-none shadow-xs dark:border-slate-800 dark:bg-slate-950 @sm:h-12 @sm:w-12 @sm:text-2xl">
                         {set.icon || '🎴'}
                       </div>
-                      <div>
-                        <h3 className="font-extrabold text-slate-900 dark:text-white text-base leading-snug">
+                      <div className="min-w-0 flex-1">
+                        <h3 className="break-words text-base leading-snug font-extrabold text-slate-900 dark:text-white">
                           {set.title}
                         </h3>
-                        <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-0.5">
-                          <span>{set.category}</span>
+                        <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">
+                          <span className="break-words">{set.category}</span>
                           <span aria-hidden="true">·</span>
                           <span className="font-mono tabular-nums font-bold">{set.pairs.length} Paare</span>
                           <span aria-hidden="true">·</span>
-                          <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                          <span className="break-words font-semibold text-emerald-600 dark:text-emerald-400">
                             {propertiesCount} Eigenschaften
                           </span>
                         </div>
@@ -385,7 +385,7 @@ export const CardSetSelector: React.FC<CardSetSelectorProps> = ({
                     </div>
 
                     {set.isCustom && (
-                      <span className="text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-100/60 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 px-2 py-0.5 rounded-md whitespace-nowrap shrink-0">
+                      <span className="max-w-full shrink-0 self-start rounded-md border border-emerald-300 bg-emerald-100/60 px-2 py-0.5 text-[10px] font-extrabold whitespace-nowrap text-emerald-600 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400">
                         Individuell
                       </span>
                     )}
@@ -410,7 +410,7 @@ export const CardSetSelector: React.FC<CardSetSelectorProps> = ({
                   )}
 
                   {/* Card Previews Ribbon */}
-                  <div className="my-2 flex items-center gap-1.5 overflow-hidden p-2 rounded-xl bg-slate-100 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800">
+                  <div className="my-2 flex min-w-0 items-center gap-1.5 overflow-x-auto rounded-xl border border-slate-200/60 bg-slate-100 p-2 dark:border-slate-800 dark:bg-slate-950">
                     {set.pairs.slice(0, 5).map((p, idx) => (
                       <div
                         key={idx}
@@ -445,11 +445,11 @@ export const CardSetSelector: React.FC<CardSetSelectorProps> = ({
                 </div>
 
                 {/* Bottom Actions: Play + Recall + Draw + ALL Sets can be Exported, Edited, Deleted! */}
-                <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 mt-2">
-                  <div className="flex-1 flex items-center gap-1.5">
+                <div className="mt-2 flex min-w-0 flex-col gap-2 border-t border-slate-200 pt-3 dark:border-slate-800 @sm:flex-row @sm:items-center @sm:justify-between">
+                  <div className="flex min-w-0 items-center gap-1.5 @sm:flex-1">
                     <button
                       onClick={() => onSelectSet(set)}
-                      className="flex-1 py-2 px-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-colors whitespace-nowrap shrink-0 cursor-pointer bg-slate-200 dark:bg-slate-800 hover:bg-emerald-600 hover:text-white text-slate-900 dark:text-slate-100"
+                      className="flex min-w-0 flex-1 cursor-pointer items-center justify-center gap-1 rounded-xl bg-slate-200 px-2.5 py-2 text-xs font-bold whitespace-nowrap text-slate-900 transition-colors hover:bg-emerald-600 hover:text-white dark:bg-slate-800 dark:text-slate-100"
                     >
                       <Play className="w-3.5 h-3.5 fill-current" />
                       <span>Spielen</span>
@@ -458,26 +458,26 @@ export const CardSetSelector: React.FC<CardSetSelectorProps> = ({
                       <button
                         onClick={() => onSelectRecall(set)}
                         title="Selbstabfrage starten"
-                        className="py-2 px-2 rounded-xl text-xs font-semibold bg-emerald-50 dark:bg-emerald-950 hover:bg-emerald-100 dark:hover:bg-emerald-900 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 flex items-center justify-center gap-1 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                        className="shrink-0 cursor-pointer rounded-xl border border-emerald-300 bg-emerald-50 px-2 py-2 text-xs font-semibold text-emerald-800 transition-colors hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 dark:hover:bg-emerald-900 @sm:flex @sm:items-center @sm:justify-center @sm:gap-1"
                       >
                         <span>🧠</span>
-                        <span className="hidden sm:inline">Test</span>
+                        <span className="hidden @sm:inline">Test</span>
                       </button>
                     )}
                     {onSelectDrawing && canUseDrawingMode(set) && (
                       <button
                         onClick={() => onSelectDrawing(set)}
                         title="Zeichenmodus starten"
-                        className="py-2 px-2 rounded-xl text-xs font-semibold bg-teal-50 dark:bg-teal-950 hover:bg-teal-100 dark:hover:bg-teal-900 border border-teal-300 dark:border-teal-800 text-teal-800 dark:text-teal-300 flex items-center justify-center gap-1 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                        className="shrink-0 cursor-pointer rounded-xl border border-teal-300 bg-teal-50 px-2 py-2 text-xs font-semibold text-teal-800 transition-colors hover:bg-teal-100 dark:border-teal-800 dark:bg-teal-950 dark:text-teal-300 dark:hover:bg-teal-900 @sm:flex @sm:items-center @sm:justify-center @sm:gap-1"
                       >
                         <span>✏️</span>
-                        <span className="hidden sm:inline">Skizze</span>
+                        <span className="hidden @sm:inline">Skizze</span>
                       </button>
                     )}
                   </div>
 
                   {/* SET MANAGEMENT BUTTONS: EXPORT, EDIT, DELETE (For ALL sets!) */}
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex shrink-0 items-center gap-1 self-end @sm:self-auto">
                     {/* Export ZIP */}
                     <button
                       onClick={() => handleExportSingleSet(set)}

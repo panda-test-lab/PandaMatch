@@ -162,7 +162,7 @@ export function RepoSetImportModal({
               const status = isCurrent
                 ? 'Aktuell'
                 : installed?.sourceArchiveSha
-                  ? 'Update verfügbar'
+                  ? 'Abweichende Version erkannt'
                   : installed
                     ? 'Vorhanden · Version unbekannt'
                     : 'Noch nicht heruntergeladen';
