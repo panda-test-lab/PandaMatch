@@ -79,11 +79,13 @@ export function saveCardSet(set: CardSet): boolean {
   try {
     const current = getAllCardSets();
     const index = current.findIndex((s) => s.id === set.id);
+    const updatedAt = new Date().toISOString();
     if (index >= 0) {
       const existing = current[index];
       current[index] = {
         ...set,
         isCustom: true,
+        updatedAt,
         sourceArchiveSha: set.sourceArchiveSha ?? existing.sourceArchiveSha,
         sourceArchiveName: set.sourceArchiveName ?? existing.sourceArchiveName,
         sourceRepoPath: set.sourceRepoPath ?? existing.sourceRepoPath,
@@ -93,6 +95,7 @@ export function saveCardSet(set: CardSet): boolean {
         ...set,
         isCustom: true,
         createdAt: new Date().toISOString(),
+        updatedAt,
       });
     }
     localStorage.setItem(ALL_SETS_KEY, JSON.stringify(current));
@@ -146,7 +149,8 @@ export function importCardSetsJson(jsonText: string): {
       const cleanSet: CardSet = {
         id: cleanId,
         title: String(raw.title || 'Importiertes Set'),
-        description: String(raw.description || 'Importiertes Kartenset mit Eigenschaften.'),
+        description: String(raw.description || ''),
+        author: typeof raw.author === 'string' ? raw.author : undefined,
         category: String(raw.category || 'Importierte Sets'),
         icon: String(raw.icon || '📦'),
         color: raw.color || 'emerald',
@@ -155,6 +159,7 @@ export function importCardSetsJson(jsonText: string): {
         sourceArchiveSha: typeof raw.sourceArchiveSha === 'string' ? raw.sourceArchiveSha : undefined,
         sourceArchiveName: typeof raw.sourceArchiveName === 'string' ? raw.sourceArchiveName : undefined,
         sourceRepoPath: typeof raw.sourceRepoPath === 'string' ? raw.sourceRepoPath : undefined,
+        updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
         pairs: raw.pairs.map((p: any, pIdx: number) => ({
           id: p.id || `pair_${Date.now()}_${pIdx}`,
           title: String(p.title || `Konzept ${pIdx + 1}`),

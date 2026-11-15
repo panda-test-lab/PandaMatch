@@ -39,6 +39,23 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function formatUpdatedAt(value?: string): string {
+  if (!value) return 'unbekannt';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'unbekannt';
+  return new Intl.DateTimeFormat('de-DE', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date);
+}
+
+type RepositoryMetadataStatus = {
+  status: 'loading' | 'loaded' | 'error';
+  author?: string;
+  description?: string;
+  updatedAt?: string;
+};
+
 export function RepoSetImportModal({
   allSets,
   onClose,
@@ -47,23 +64,72 @@ export function RepoSetImportModal({
   const [archives, setArchives] = useState<RepositorySetArchive[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [downloadingPath, setDownloadingPath] = useState<string | null>(null);
+  const [metadataByPath, setMetadataByPath] = useState<Record<string, RepositoryMetadataStatus>>({});
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    void listRepositorySetArchives()
-      .then((result) => {
-        if (!cancelled) setArchives(result);
-      })
-      .catch((cause: unknown) => {
+    const loadArchivesAndMetadata = async () => {
+      try {
+        const result = await listRepositorySetArchives();
         if (cancelled) return;
-        const message = String(cause);
-        setError(message);
+        setArchives(result);
+        setIsLoading(false);
+        setMetadataByPath(Object.fromEntries(
+          result.map((archive) => [archive.path, { status: 'loading' as const }]),
+        ));
+
+        let nextIndex = 0;
+        const loadNextMetadata = async () => {
+          while (!cancelled) {
+            const index = nextIndex;
+            nextIndex += 1;
+            if (index >= result.length) return;
+
+            const archive = result[index];
+            try {
+              const bytes = await downloadRepositorySetArchive(archive);
+              const set = await readSetArchive(bytes, {
+                archiveName: archiveFilename(archive.path),
+                sourceArchiveSha: archive.sha,
+                sourceRepoPath: archive.path,
+              });
+              if (!cancelled) {
+                setMetadataByPath((metadata) => ({
+                  ...metadata,
+                  [archive.path]: {
+                    status: 'loaded',
+                    author: set.author,
+                    description: set.description,
+                    updatedAt: set.updatedAt,
+                  },
+                }));
+              }
+            } catch (cause) {
+              reportAppError(cause, `Metadaten von ${archive.path} laden`);
+              if (!cancelled) {
+                setMetadataByPath((metadata) => ({
+                  ...metadata,
+                  [archive.path]: { status: 'error' },
+                }));
+              }
+            }
+          }
+        };
+
+        await Promise.all(
+          Array.from({ length: Math.min(3, result.length) }, () => loadNextMetadata()),
+        );
+      } catch (cause) {
+        if (cancelled) return;
+        setError(String(cause));
         reportAppError(cause, 'Sets aus PandaMatch_Sets laden');
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setIsLoading(false);
-      });
+      }
+    };
+
+    void loadArchivesAndMetadata();
     return () => {
       cancelled = true;
     };
@@ -170,37 +236,71 @@ export function RepoSetImportModal({
               return (
                 <li
                   key={archive.path}
-                  className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-950 sm:flex-row sm:items-center sm:justify-between"
+                  className="flex flex-col items-start gap-3 rounded-2xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-950"
                 >
-                  <div className="min-w-0">
-                    <p className="break-all text-sm font-bold text-slate-900 dark:text-white">{name}</p>
-                    <p className="mt-0.5 break-all text-[11px] text-slate-500 dark:text-slate-400">
-                      {archive.path} · {formatSize(archive.size)}
-                    </p>
-                    <p className={`mt-1 flex items-center gap-1 text-xs font-semibold ${
-                      isCurrent
-                        ? 'text-emerald-700 dark:text-emerald-400'
-                        : installed
-                          ? 'text-amber-700 dark:text-amber-400'
-                          : 'text-slate-500 dark:text-slate-400'
-                    }`}>
-                      {isCurrent && <CheckCircle2 className="h-3.5 w-3.5" />}
-                      {status}
-                    </p>
+                  <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="break-all text-sm font-bold text-slate-900 dark:text-white">{name}</p>
+                      <p className="mt-0.5 break-all text-[11px] text-slate-500 dark:text-slate-400">
+                        {archive.path} · {formatSize(archive.size)}
+                      </p>
+                      <p className={`mt-1 flex items-center gap-1 text-xs font-semibold ${
+                        isCurrent
+                          ? 'text-emerald-700 dark:text-emerald-400'
+                          : installed
+                            ? 'text-amber-700 dark:text-amber-400'
+                            : 'text-slate-500 dark:text-slate-400'
+                      }`}>
+                        {isCurrent && <CheckCircle2 className="h-3.5 w-3.5" />}
+                        {status}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={isCurrent || downloadingPath !== null}
+                        onClick={() => void handleDownload(archive)}
+                        className="flex items-center justify-center gap-2 rounded-xl bg-sky-600 px-3.5 py-2 text-xs font-bold text-white transition-colors hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-400"
+                      >
+                        {isDownloading
+                          ? <LoaderCircle className="h-4 w-4 animate-spin" />
+                          : installed
+                            ? <RefreshCw className="h-4 w-4" />
+                            : <CloudDownload className="h-4 w-4" />}
+                        {isCurrent ? 'Aktuell' : installed ? 'Aktualisieren' : 'Herunterladen'}
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    type="button"
-                    disabled={isCurrent || downloadingPath !== null}
-                    onClick={() => void handleDownload(archive)}
-                    className="flex shrink-0 items-center justify-center gap-2 rounded-xl bg-sky-600 px-3.5 py-2 text-xs font-bold text-white transition-colors hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-400"
-                  >
-                    {isDownloading
-                      ? <LoaderCircle className="h-4 w-4 animate-spin" />
-                      : installed
-                        ? <RefreshCw className="h-4 w-4" />
-                        : <CloudDownload className="h-4 w-4" />}
-                    {isCurrent ? 'Aktuell' : installed ? 'Aktualisieren' : 'Herunterladen'}
-                  </button>
+                  <dl className="grid w-full gap-2 border-t border-slate-200 pt-3 text-xs dark:border-slate-800 sm:grid-cols-2">
+                    <div>
+                      <dt className="font-bold text-slate-700 dark:text-slate-300">Autor</dt>
+                      <dd className="mt-0.5 text-slate-600 dark:text-slate-400">
+                        {metadataByPath[archive.path]?.status === 'loading'
+                          ? 'Wird geladen …'
+                          : metadataByPath[archive.path]?.status === 'error'
+                            ? 'Konnte nicht geladen werden'
+                            : metadataByPath[archive.path]?.author?.trim() || 'unbekannt'}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="font-bold text-slate-700 dark:text-slate-300">Zuletzt geändert</dt>
+                      <dd className="mt-0.5 text-slate-600 dark:text-slate-400">
+                        {metadataByPath[archive.path]?.status === 'loading'
+                          ? 'Wird geladen …'
+                          : formatUpdatedAt(metadataByPath[archive.path]?.updatedAt)}
+                      </dd>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <dt className="font-bold text-slate-700 dark:text-slate-300">Beschreibung</dt>
+                      <dd className="mt-0.5 whitespace-pre-wrap text-slate-600 dark:text-slate-400">
+                        {metadataByPath[archive.path]?.status === 'loading'
+                          ? 'Wird geladen …'
+                          : metadataByPath[archive.path]?.status === 'error'
+                            ? 'Konnte nicht geladen werden'
+                            : metadataByPath[archive.path]?.description?.trim() || 'unbekannt'}
+                      </dd>
+                    </div>
+                  </dl>
                 </li>
               );
             })}

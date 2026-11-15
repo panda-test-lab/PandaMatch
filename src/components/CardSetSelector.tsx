@@ -28,6 +28,16 @@ import {
 import { canUseDrawingMode } from '../utils/drawingMode';
 import { reportAppError } from '../utils/errorReporting';
 
+function formatUpdatedAt(value?: string): string {
+  if (!value) return 'unbekannt';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'unbekannt';
+  return new Intl.DateTimeFormat('de-DE', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date);
+}
+
 interface CardSetSelectorProps {
   allSets: CardSet[];
   setsDirectory?: string | null;
@@ -392,7 +402,10 @@ export const CardSetSelector: React.FC<CardSetSelectorProps> = ({
                   </div>
 
                   <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2 my-2.5">
-                    {set.description || 'Kartenset mit flexiblen Eigenschaften.'}
+                    {set.description?.trim() || 'unbekannt'}
+                  </p>
+                  <p className="mb-2.5 text-[11px] text-slate-500 dark:text-slate-400">
+                    Autor: {set.author?.trim() || 'unbekannt'} · Zuletzt geändert: {formatUpdatedAt(set.updatedAt)}
                   </p>
 
                   {/* Properties Tags Ribbon */}

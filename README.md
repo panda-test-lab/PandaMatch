@@ -8,7 +8,7 @@ Lernen muss sich nicht nach Pauken anfühlen! **PandaMatch** macht aus Begriffen
 - **Offen lernen:** Alle Karten liegen aufgedeckt vor dir. So kannst du Zusammenhänge in Ruhe erkennen und passende Begriffe, Formeln oder Bilder zuordnen.
 - **Dich selbst abfragen:** Beim Active Recall rufst du weitere Eigenschaften eines Konzepts aus dem Gedächtnis ab und schätzt ein, wie sicher du dir bist. Unsichere Inhalte kommen beim Üben bevorzugt wieder.
 - **Wissen zeichnen:** Im Zeichenmodus skizzierst du mit Maus oder Touch – zum Beispiel eine Strukturformel – und vergleichst deine Zeichnung anschließend mit der Lösung.
-- **Eigene Sets gestalten:** Lege Kartensets mit beliebig benannten Eigenschaften und ergänzenden Informationen an. Formeln, chemische Strukturen und Bilder werden unterstützt; für LaTeX und chemische Notation gibt es einen Editor mit Vorlagen und Live-Vorschau.
+- **Eigene Sets gestalten:** Lege Kartensets mit beliebig benannten Eigenschaften und ergänzenden Informationen an. Mathematische Formeln lassen sich mit LaTeX schreiben; Grafiken kannst du einfügen und in der Vorschau prüfen.
 - **Deinen Lernstand im Blick behalten:** Statistiken zeigen, was schon sitzt und was noch Übung braucht. In der Bestenliste kannst du deine Spielergebnisse ansehen.
 - **Flexibel spielen:** Wähle einzelne oder mehrere Sets, lass Karten aus allen Sets mischen und passe den Umfang der Runde an. Den klassischen Modus kannst du allein oder zu zweit spielen.
 
@@ -17,6 +17,8 @@ Lernen muss sich nicht nach Pauken anfühlen! **PandaMatch** macht aus Begriffen
 Lade den Installer für dein Gerät aus den [offiziellen Releases](https://github.com/panda-test-lab/PandaMatch/releases) herunter und installiere PandaMatch. Die Desktop-App prüft beim Start auf Updates und fragt vor dem Download und der Installation nach; Android und iOS verwenden diesen internen Updater nicht. Eine lokale npm-Installation ist für die normale Nutzung nicht erforderlich. Wähle anschließend im Hauptmenü einen Spiel- oder Lernmodus. Vor einer Runde kannst du das Kartenset und weitere Einstellungen festlegen. Wenn du eigene Inhalte nutzen möchtest, findest du unter **Kartensets** die Verwaltung zum Erstellen und Bearbeiten.
 
 ## Kartensets erstellen und teilen
+
+Kartensets speichern Autor und Beschreibung sowie Datum und Uhrzeit der letzten Änderung. Autor, Beschreibung und Änderungszeit werden in der Repo-Auswahl direkt angezeigt. Für Set-Icons und Karten-Emojis steht eine Stichwortsuche mit 250 Emojis bereit.
 
 Unter **Kartensets** kannst du Sets anlegen, bearbeiten, suchen und löschen. Jedes Set lässt sich einzeln als ZIP-Datei mit `set.json` und dem zugehörigen `Bilder/`-Ordner exportieren. Diese ZIP-Dateien kannst du direkt wieder importieren und mit anderen teilen; JSON-Dateien und eingefügter JSON-Code werden weiterhin unterstützt. Über **Sets aus Repo** kannst du außerdem ZIP-Sets aus dem öffentlichen Repository **PandaMatch_Sets** anzeigen, herunterladen und bei einer neueren Repo-Version aktualisieren.
 

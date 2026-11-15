@@ -138,8 +138,8 @@ export const InfoTourModal: React.FC<InfoTourModalProps> = ({
           desc: 'Benenne eigene Eigenschaftsspalten (z. B. Struktur, IUPAC, Indikation, CAS-Nr.) und pflege optional "Weitere Informationen" ein.',
         },
         {
-          title: 'Integrierter LaTeX- & chemfig-Editor',
-          desc: 'Nutze Vorlagen für Benzolringe, funktionelle Gruppen und Pfeile mit Live-Vorschau.',
+          title: 'Mathe-Formeln und Grafiken',
+          desc: 'Schreibe mathematische Formeln mit LaTeX und füge Grafiken mit Live-Vorschau ein.',
         },
         {
           title: 'Im- und Export',
@@ -154,7 +154,7 @@ export const InfoTourModal: React.FC<InfoTourModalProps> = ({
       icon: <Heart className="w-6 h-6 fill-current text-rose-500" />,
       iconBg: 'bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700',
       description:
-        'Wusstest du? Ein Großer Panda kaut täglich bis zu 14 Stunden auf Bambus herum – und Entwickler trinken fast genauso viel Kaffee, um Strukturformeln, chemfig-Befehle und Spaced-Repetition-Logik fehlerfrei in eine App zu packen! 😉',
+        'Wusstest du? Ein Großer Panda kaut täglich bis zu 14 Stunden auf Bambus herum – und Entwickler trinken fast genauso viel Kaffee, um Formeln, Grafiken und Spaced-Repetition-Logik fehlerfrei in eine App zu packen! 😉',
       highlights: [
         {
           title: '100% Kostenlos & Werbefrei',

@@ -36,6 +36,7 @@ export interface CardSet {
   id: string;
   title: string;
   description: string;
+  author?: string;
   category: string;
   icon: string;
   color: string;
@@ -44,6 +45,7 @@ export interface CardSet {
   availableProperties?: { key: string; label: string }[];
   isCustom?: boolean;
   createdAt?: string;
+  updatedAt?: string;
   sourceArchiveSha?: string;
   sourceArchiveName?: string;
   sourceRepoPath?: string;

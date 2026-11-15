@@ -12,10 +12,12 @@ import {
   CheckCircle2,
   SlidersHorizontal,
   X,
-  FlaskConical
+  Sigma
 } from 'lucide-react';
 import { LatexRenderer } from './LatexRenderer';
-import { ChemicalFormulaModal } from './ChemicalFormulaModal';
+import { FormulaAndImageModal } from './FormulaAndImageModal';
+import { EmojiPicker } from './EmojiPicker';
+import { EMOJI_OPTIONS } from '../data/emojiOptions';
 
 interface CustomSetEditorProps {
   initialSet?: CardSet | null;
@@ -23,12 +25,6 @@ interface CustomSetEditorProps {
   onCancel: () => void;
   onPlayDirectly: (set: CardSet) => void;
 }
-
-const COMMON_EMOJIS = [
-  '⭐', '🌟', '💎', '🔥', '🌊', '🍀', '🎯', '🎸', '🎨', '🧩',
-  '🚀', '🛸', '🛰️', '👑', '🦁', '🐬', '🦉', '🦊', '🐼', '🍕',
-  '🍔', '🍣', '🍦', '🍩', '⚽', '🏀', '🏎️', '✈️', '⛵', '🏰'
-];
 
 const isImageFile = (file: File) =>
   file.type.startsWith('image/') || /\.(avif|bmp|gif|jpe?g|png|svg|webp)$/i.test(file.name);
@@ -41,8 +37,8 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
 }) => {
   const [title, setTitle] = useState(initialSet?.title || 'Mein Kartenset');
   const [category, setCategory] = useState(initialSet?.category || 'Eigene Sammlung');
-  const description =
-    initialSet?.description || 'Eigenes Kartenset.';
+  const [description, setDescription] = useState(initialSet?.description || '');
+  const [author, setAuthor] = useState(initialSet?.author || '');
   const [icon, setIcon] = useState(initialSet?.icon || '🎴');
 
   // Available properties for multi-attribute matching (Requirement 3)
@@ -158,7 +154,7 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
 
   // Add empty pair / concept
   const handleAddEmptyPair = () => {
-    const randomEmoji = COMMON_EMOJIS[Math.floor(Math.random() * COMMON_EMOJIS.length)];
+    const randomEmoji = EMOJI_OPTIONS[Math.floor(Math.random() * EMOJI_OPTIONS.length)].emoji;
     const newPairProps: Record<string, CardProperty> = {};
     availableProperties.forEach((p, idx) => {
       newPairProps[p.key] = {
@@ -279,6 +275,7 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
       id: initialSet?.id || `custom_set_${Date.now()}`,
       title: title.trim() || 'Unbenanntes Set',
       description: description.trim(),
+      author: author.trim(),
       category: category.trim() || 'Pharmazie & Naturwissenschaften',
       icon: icon.trim() || '🔬',
       color: 'emerald',
@@ -286,6 +283,7 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
       availableProperties,
       isCustom: true,
       createdAt: initialSet?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
   };
 
@@ -388,6 +386,32 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
 
         <div>
           <label className="block text-xs font-bold text-slate-900 dark:text-slate-300 mb-1">
+            Autor
+          </label>
+          <input
+            type="text"
+            value={author}
+            onChange={(e) => setAuthor(e.target.value)}
+            placeholder="Name des Autors"
+            className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-200 dark:bg-slate-950 text-slate-950 dark:text-white placeholder:text-slate-600 dark:placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+          />
+        </div>
+
+        <div className="sm:col-span-2 lg:col-span-3">
+          <label className="block text-xs font-bold text-slate-900 dark:text-slate-300 mb-1">
+            Beschreibung des Sets
+          </label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={3}
+            placeholder="Worum geht es in diesem Kartenset?"
+            className="w-full resize-y px-3.5 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-200 dark:bg-slate-950 text-slate-950 dark:text-white placeholder:text-slate-600 dark:placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold text-slate-900 dark:text-slate-300 mb-1">
             Icon / Symbol
           </label>
           <input
@@ -397,23 +421,8 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
             aria-label="Kartenset-Icon"
             className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-200 dark:bg-slate-950 text-slate-950 dark:text-white placeholder:text-slate-600 dark:placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
           />
-          <div className="mt-2 grid grid-cols-6 gap-1.5" role="group" aria-label="Vorgeschlagene Icons">
-            {COMMON_EMOJIS.map((emoji) => (
-              <button
-                key={emoji}
-                type="button"
-                onClick={() => setIcon(emoji)}
-                aria-label={`Icon ${emoji} auswählen`}
-                aria-pressed={icon === emoji}
-                className={`h-9 rounded-lg border text-xl transition-colors cursor-pointer ${
-                  icon === emoji
-                    ? 'border-emerald-500 bg-emerald-100 dark:bg-emerald-950/70'
-                    : 'border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-950 hover:border-emerald-500'
-                }`}
-              >
-                {emoji}
-              </button>
-            ))}
+          <div className="mt-2">
+            <EmojiPicker value={icon} onChange={setIcon} label="Icon" />
           </div>
         </div>
       </div>
@@ -629,9 +638,9 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
                         type="button"
                         onClick={() => setModalTarget({ pairIdx: idx, propKey: pMeta.key })}
                         className="flex items-center gap-1 text-[10px] font-extrabold text-emerald-950 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950 px-2 py-0.5 rounded-lg border border-emerald-300 dark:border-emerald-800 hover:bg-emerald-200 dark:hover:bg-emerald-900 transition-colors cursor-pointer shadow-xs shrink-0"
-                        title="Formel-Assistent für Strukturformeln, LaTeX oder Screenshots öffnen"
+                        title="Mathe-Formel oder Grafik einfügen"
                       >
-                        <FlaskConical className="w-3 h-3" />
+                        <Sigma className="w-3 h-3" />
                         <span>Formel-Assistent</span>
                       </button>
                     </div>
@@ -680,15 +689,15 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
                       ))}
                     </div>
 
-                    {/* Quick LaTeX Chemical Snippets */}
+                    {/* Quick math snippets */}
                     {prop.type === 'latex' && (
                       <div className="flex flex-wrap items-center gap-1 py-0.5">
                         <span className="text-[9px] font-bold text-slate-600 dark:text-slate-400">Schnellbausteine:</span>
                         {[
-                          { label: 'C_6H_6', snippet: '\\mathrm{C_6H_6}' },
-                          { label: '-COOH', snippet: '\\mathrm{-COOH}' },
-                          { label: '-OH', snippet: '\\mathrm{-OH}' },
-                          { label: '-NH_2', snippet: '\\mathrm{-NH_2}' },
+                          { label: 'x^2', snippet: 'x^2' },
+                          { label: '\\frac{a}{b}', snippet: '\\frac{a}{b}' },
+                          { label: '\\sqrt{x}', snippet: '\\sqrt{x}' },
+                          { label: '\\alpha', snippet: '\\alpha ' },
                           { label: '_2', snippet: '_2' },
                           { label: '→', snippet: '\\rightarrow ' },
                         ].map((s) => (
@@ -709,6 +718,13 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
                     )}
 
                     {/* Inputs with Non-white background and High Contrast */}
+                    {prop.type === 'emoji' && (
+                      <EmojiPicker
+                        value={prop.content}
+                        onChange={(content) => handleUpdateProperty(idx, pMeta.key, { content })}
+                        label="Karten-Emoji"
+                      />
+                    )}
                     <input
                       type="text"
                       value={prop.content}
@@ -738,9 +754,9 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
         ))}
       </div>
 
-      {/* Chemical Formula / LaTeX / Screenshot Modal */}
+      {/* Math formula / image modal */}
       {modalTarget && (
-        <ChemicalFormulaModal
+        <FormulaAndImageModal
           isOpen={true}
           onClose={() => setModalTarget(null)}
           initialContent={
