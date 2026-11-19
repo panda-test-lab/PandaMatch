@@ -365,7 +365,7 @@ const GameSetupModalContent: React.FC<GameSetupModalContentProps> = ({
                       <div className="flex-1 min-w-0">
                         <div className="font-extrabold text-xs truncate">{s.title}</div>
                         <div className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
-                          <span>{s.category}</span>
+                          <span>{[s.category, s.subcategory].filter(Boolean).join(' · ')}</span>
                           <span>·</span>
                           <span className="font-mono">{s.pairs.length} Paare</span>
                         </div>

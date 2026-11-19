@@ -798,13 +798,20 @@ fn delete_saved_set(id: String, storage: State<'_, SetsStorage>) -> Result<(), S
 }
 
 #[tauri::command]
-fn import_sets_from_files(app: tauri::AppHandle) -> Result<Option<Vec<Value>>, String> {
-    let selected = app
+async fn import_sets_from_files(app: tauri::AppHandle) -> Result<Option<Vec<Value>>, String> {
+    let (selected_sender, mut selected_receiver) = tauri::async_runtime::channel(1);
+    app
         .dialog()
         .file()
         .add_filter("PandaMatch-Kartensets", &["json", "zip"])
         .set_title("Kartensets (JSON oder ZIP) importieren")
-        .blocking_pick_files();
+        .pick_files(move |selected| {
+            let _ = selected_sender.try_send(selected);
+        });
+    let selected = selected_receiver
+        .recv()
+        .await
+        .ok_or_else(|| "Der Dateidialog hat keine Auswahl zurückgegeben.".to_string())?;
     let Some(files) = selected else {
         return Ok(None);
     };

@@ -18,9 +18,9 @@ Lade den Installer für dein Gerät aus den [offiziellen Releases](https://githu
 
 ## Kartensets erstellen und teilen
 
-Kartensets speichern Autor und Beschreibung sowie Datum und Uhrzeit der letzten Änderung. Autor, Beschreibung und Änderungszeit werden in der Repo-Auswahl direkt angezeigt. Für Set-Icons und Karten-Emojis steht eine Stichwortsuche mit 250 Emojis bereit.
+Kartensets speichern Name, Fachgebiet, optionales Teilgebiet, Autor, Beschreibung, Icon und Datum/Uhrzeit der letzten Änderung. Die Änderungszeit wird bei jeder Speicherung automatisch aktualisiert. Für Set-Icons und Karten-Emojis steht eine Stichwortsuche mit 260 Emojis bereit, darunter Symbole aus Medizin, Pharmazie und Naturwissenschaften.
 
-Unter **Kartensets** kannst du Sets anlegen, bearbeiten, suchen und löschen. Jedes Set lässt sich einzeln als ZIP-Datei mit `set.json` und dem zugehörigen `Bilder/`-Ordner exportieren. Diese ZIP-Dateien kannst du direkt wieder importieren und mit anderen teilen; JSON-Dateien und eingefügter JSON-Code werden weiterhin unterstützt. Über **Sets aus Repo** kannst du außerdem ZIP-Sets aus dem öffentlichen Repository **PandaMatch_Sets** anzeigen, herunterladen und bei einer neueren Repo-Version aktualisieren.
+Unter **Kartensets** kannst du Sets anlegen, bearbeiten, suchen und löschen. Hochgeladene Bilder landen in einer benennbaren Set-Bildsammlung und werden erst über ein Dropdown einer Karteneigenschaft vom Typ **Bild** zugeordnet; der Upload erzeugt keine Kartenpaare mehr. Jedes Set lässt sich einzeln als ZIP-Datei mit `set.json` und dem zugehörigen `Bilder/`-Ordner exportieren. Diese ZIP-Dateien kannst du direkt wieder importieren und mit anderen teilen; JSON-Dateien und eingefügter JSON-Code werden weiterhin unterstützt. Über **Sets aus Repo** kannst du außerdem ZIP-Sets aus dem öffentlichen Repository **PandaMatch_Sets** anzeigen, herunterladen und bei einer neueren Repo-Version aktualisieren.
 
 Zusätzlich entsteht ein eigenes Repository namens **PandaFlow_Sets**, in dem ich selbst erstellte Kartensets anbieten werde. Das Repository ist noch in Arbeit und wird hier verlinkt, sobald es verfügbar ist.
 

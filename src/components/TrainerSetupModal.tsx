@@ -1,14 +1,14 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { CardSet } from '../types/memory';
 import { X, Play, Search, Brain, PenTool } from 'lucide-react';
-import { canUseDrawingMode } from '../utils/drawingMode';
+import { canUseDrawingMode, getDrawingPropertyOptions } from '../utils/drawingMode';
 
 interface TrainerSetupModalProps {
   isOpen: boolean;
   onClose: () => void;
   mode: 'recall' | 'drawing';
   allSets: CardSet[];
-  onStartTrainer: (cardSet: CardSet) => void;
+  onStartTrainer: (cardSet: CardSet, selectedPropertyKeys?: string[]) => void;
 }
 
 export const TrainerSetupModal: React.FC<TrainerSetupModalProps> = ({
@@ -20,18 +20,28 @@ export const TrainerSetupModal: React.FC<TrainerSetupModalProps> = ({
 }) => {
   const [selectedSetId, setSelectedSetId] = useState<string>(allSets[0]?.id || '');
   const [searchQuery, setSearchQuery] = useState('');
+  const isRecall = mode === 'recall';
+  const eligibleSets = isRecall ? allSets : allSets.filter(canUseDrawingMode);
+  const selectedSet = eligibleSets.find((s) => s.id === selectedSetId) || eligibleSets[0];
+  const drawingProperties = useMemo(
+    () => !isRecall && selectedSet ? getDrawingPropertyOptions(selectedSet) : [],
+    [isRecall, selectedSet],
+  );
+  const [selectedDrawingPropertyKeys, setSelectedDrawingPropertyKeys] = useState<string[]>([]);
+
+  useEffect(() => {
+    setSelectedDrawingPropertyKeys(drawingProperties.map((property) => property.key));
+  }, [drawingProperties]);
 
   if (!isOpen) return null;
 
-  const isRecall = mode === 'recall';
-  const eligibleSets = isRecall ? allSets : allSets.filter(canUseDrawingMode);
   const filteredSets = eligibleSets.filter((s) => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
-    return s.title.toLowerCase().includes(q) || s.category.toLowerCase().includes(q);
+    return s.title.toLowerCase().includes(q) ||
+      s.category.toLowerCase().includes(q) ||
+      (s.subcategory?.toLowerCase().includes(q) ?? false);
   });
-
-  const selectedSet = eligibleSets.find((s) => s.id === selectedSetId) || eligibleSets[0];
 
   return (
     <div
@@ -114,7 +124,7 @@ export const TrainerSetupModal: React.FC<TrainerSetupModalProps> = ({
                   <div className="flex-1 min-w-0">
                     <div className="font-extrabold text-xs sm:text-sm truncate">{s.title}</div>
                     <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-0.5">
-                      <span>{s.category}</span>
+                      <span>{[s.category, s.subcategory].filter(Boolean).join(' · ')}</span>
                       <span>·</span>
                       <span className="font-mono">{s.pairs.length} Paare</span>
                     </div>
@@ -123,6 +133,42 @@ export const TrainerSetupModal: React.FC<TrainerSetupModalProps> = ({
               );
             })}
           </div>
+
+          {!isRecall && selectedSet && (
+            <section className="rounded-2xl border border-slate-300 bg-slate-100 p-3 dark:border-slate-800 dark:bg-slate-950">
+              <h3 className="mb-2 text-xs font-extrabold text-slate-900 dark:text-white">
+                Welche Strukturen möchtest du üben?
+              </h3>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {drawingProperties.map((property) => {
+                  const checked = selectedDrawingPropertyKeys.includes(property.key);
+                  return (
+                    <label
+                      key={property.key}
+                      className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(event) => {
+                          setSelectedDrawingPropertyKeys((current) =>
+                            event.target.checked
+                              ? [...current, property.key]
+                              : current.filter((key) => key !== property.key)
+                          );
+                        }}
+                        className="accent-emerald-600"
+                      />
+                      <span className="min-w-0 flex-1">{property.label}</span>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                        {property.availableCount}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </section>
+          )}
         </div>
 
         {/* Footer */}
@@ -139,11 +185,14 @@ export const TrainerSetupModal: React.FC<TrainerSetupModalProps> = ({
             type="button"
             onClick={() => {
               if (selectedSet) {
-                onStartTrainer(selectedSet);
+                onStartTrainer(
+                  selectedSet,
+                  isRecall ? undefined : selectedDrawingPropertyKeys,
+                );
                 onClose();
               }
             }}
-            disabled={!selectedSet}
+            disabled={!selectedSet || (!isRecall && selectedDrawingPropertyKeys.length === 0)}
             className="flex items-center gap-2 px-6 py-2.5 text-xs sm:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-xl shadow-sm transition-all cursor-pointer"
           >
             <Play className="w-4 h-4 fill-current" />

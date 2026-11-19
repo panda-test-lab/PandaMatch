@@ -49,6 +49,11 @@ const EMOJI_GROUPS = [
     keywords: 'wissenschaft chemie biologie weltraum symbol',
     emojis: '⚗️ 🧪 🧫 🧬 🩻 🦠 🩺 💊 🧠 🫀 🫁 🦴 🧲 ⚛️ ☢️ ☣️ 🧯 🪐 🌍 🌎 🌏 🏰 ⛵ 🍣 🍦',
   },
+  {
+    category: 'Medizin, Pharmazie & Naturwissenschaften',
+    keywords: 'medizin arzt ärztin pflege klinik pharma apotheke medikament labor chemie biologie naturwissenschaft anatomie körper spritze verband',
+    emojis: '⚕️ 🧑‍⚕️ 🧑‍🔬 🥼 💉 🩹 🩼 🧴 🦷 👁️',
+  },
 ];
 
 export const EMOJI_OPTIONS = EMOJI_GROUPS.flatMap(({ category, keywords, emojis }) =>

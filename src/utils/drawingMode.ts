@@ -57,10 +57,16 @@ function isDrawingLabel(key: string, label: string): boolean {
   return DRAWING_KEYWORDS.some((keyword) => normalized.includes(keyword));
 }
 
-export function getDrawingProperty(
+export interface DrawingPropertyOption {
+  key: string;
+  label: string;
+  availableCount: number;
+}
+
+export function getDrawingProperties(
   pair: CardPair,
   availableProperties: { key: string; label: string }[] = []
-): CardProperty | null {
+): CardProperty[] {
   const propertyMetadata = new Map(availableProperties.map((property) => [property.key, property.label]));
   const definedProperties = Object.values(pair.properties || {});
   const candidates = definedProperties.length > 0
@@ -82,11 +88,42 @@ export function getDrawingProperty(
         },
       ];
 
-  return candidates.find((property) => {
+  return candidates.filter((property) => {
     const metadataLabel = propertyMetadata.get(property.key) || '';
     return property.content.trim().length > 0 &&
       isDrawingLabel(property.key, `${property.label} ${metadataLabel}`);
-  }) || null;
+  });
+}
+
+export function getDrawingProperty(
+  pair: CardPair,
+  availableProperties: { key: string; label: string }[] = []
+): CardProperty | null {
+  return getDrawingProperties(pair, availableProperties)[0] || null;
+}
+
+export function getDrawingPropertyOptions(
+  cardSet: { pairs: CardPair[]; availableProperties?: { key: string; label: string }[] }
+): DrawingPropertyOption[] {
+  const metadata = new Map((cardSet.availableProperties || []).map((property) => [property.key, property.label]));
+  const options = new Map<string, DrawingPropertyOption>();
+
+  for (const pair of cardSet.pairs) {
+    for (const property of getDrawingProperties(pair, cardSet.availableProperties)) {
+      const option = options.get(property.key);
+      if (option) {
+        option.availableCount += 1;
+      } else {
+        options.set(property.key, {
+          key: property.key,
+          label: metadata.get(property.key) || property.label || property.key,
+          availableCount: 1,
+        });
+      }
+    }
+  }
+
+  return [...options.values()];
 }
 
 export function canUseDrawingMode(

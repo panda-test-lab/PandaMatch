@@ -1,4 +1,4 @@
-import { CardSet, HighscoreEntry, PlayerStats } from '../types/memory';
+import { CardSet, HighscoreEntry, PlayerStats, SetImageAsset } from '../types/memory';
 import { reportAppError } from './errorReporting';
 
 const CUSTOM_SETS_KEY = 'memomaster_custom_card_sets';
@@ -38,6 +38,13 @@ const REMOVED_DEMO_SET_IDS = new Set([
 function isCardSet(value: unknown): value is CardSet {
   return typeof value === 'object' && value !== null &&
     'id' in value && typeof value.id === 'string';
+}
+
+function isSetImageAsset(value: unknown): value is SetImageAsset {
+  return typeof value === 'object' && value !== null &&
+    'id' in value && typeof value.id === 'string' &&
+    'name' in value && typeof value.name === 'string' &&
+    'content' in value && typeof value.content === 'string';
 }
 
 export function isRemovedDemoSet(set: CardSet): boolean {
@@ -152,14 +159,20 @@ export function importCardSetsJson(jsonText: string): {
         description: String(raw.description || ''),
         author: typeof raw.author === 'string' ? raw.author : undefined,
         category: String(raw.category || 'Importierte Sets'),
+        subcategory: typeof raw.subcategory === 'string' && raw.subcategory.trim()
+          ? raw.subcategory
+          : undefined,
         icon: String(raw.icon || '📦'),
         color: raw.color || 'emerald',
         isCustom: true,
         availableProperties: Array.isArray(raw.availableProperties) ? raw.availableProperties : undefined,
+        imageAssets: Array.isArray(raw.imageAssets)
+          ? raw.imageAssets.filter(isSetImageAsset).map((asset: SetImageAsset) => ({ ...asset, type: 'image' }))
+          : undefined,
         sourceArchiveSha: typeof raw.sourceArchiveSha === 'string' ? raw.sourceArchiveSha : undefined,
         sourceArchiveName: typeof raw.sourceArchiveName === 'string' ? raw.sourceArchiveName : undefined,
         sourceRepoPath: typeof raw.sourceRepoPath === 'string' ? raw.sourceRepoPath : undefined,
-        updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
+        updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : new Date().toISOString(),
         pairs: raw.pairs.map((p: any, pIdx: number) => ({
           id: p.id || `pair_${Date.now()}_${pIdx}`,
           title: String(p.title || `Konzept ${pIdx + 1}`),
@@ -373,49 +386,41 @@ export function setStoredPlayerName(name: string) {
   localStorage.setItem(LAST_PLAYER_NAME_KEY, name.trim());
 }
 
-/**
- * Resizes and compresses an uploaded image file into a compact base64 data URL
- * to avoid exceeding localStorage limits.
- */
-export async function optimizeUploadedImage(file: File, maxDimension = 240): Promise<string> {
-  return new Promise((resolve, reject) => {
+export async function readUploadedImage(file: File): Promise<string> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('Konnte Datei nicht lesen.'));
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onerror = () => reject(new Error('Ungültiges Bildformat.'));
-      img.onload = () => {
-        let width = img.width;
-        let height = img.height;
-
-        if (width > height) {
-          if (width > maxDimension) {
-            height = Math.round((height * maxDimension) / width);
-            width = maxDimension;
-          }
-        } else {
-          if (height > maxDimension) {
-            width = Math.round((width * maxDimension) / height);
-            height = maxDimension;
-          }
-        }
-
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          resolve(e.target?.result as string);
-          return;
-        }
-
-        ctx.drawImage(img, 0, 0, width, height);
-        // Export as WebP or standard JPEG
-        const dataUrl = canvas.toDataURL('image/webp', 0.82) || canvas.toDataURL('image/jpeg', 0.82);
-        resolve(dataUrl);
-      };
-      img.src = e.target?.result as string;
+    reader.onload = () => {
+      if (typeof reader.result !== 'string') {
+        reject(new Error('Die Bilddatei konnte nicht in ein Datenformat gelesen werden.'));
+        return;
+      }
+      resolve(reader.result);
     };
     reader.readAsDataURL(file);
   });
+
+  const supportedMimeTypes = new Set([
+    'image/gif',
+    'image/jpeg',
+    'image/png',
+    'image/svg+xml',
+    'image/webp',
+  ]);
+  if (supportedMimeTypes.has(file.type.toLowerCase())) return dataUrl;
+
+  const image = new Image();
+  await new Promise<void>((resolve, reject) => {
+    image.onerror = () => reject(new Error('Ungültiges oder nicht unterstütztes Bildformat.'));
+    image.onload = () => resolve();
+    image.src = dataUrl;
+  });
+
+  const canvas = document.createElement('canvas');
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Das Bild konnte nicht ohne Qualitätsverlust umgewandelt werden.');
+  context.drawImage(image, 0, 0);
+  return canvas.toDataURL('image/png');
 }

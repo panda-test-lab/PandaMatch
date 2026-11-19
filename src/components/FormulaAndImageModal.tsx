@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Check, ClipboardPaste, Eye, Info, Sigma, X } from 'lucide-react';
 import { LatexRenderer } from './LatexRenderer';
-import { optimizeUploadedImage } from '../utils/storage';
+import { readUploadedImage } from '../utils/storage';
 import { reportAppError } from '../utils/errorReporting';
 
 interface FormulaAndImageModalProps {
@@ -83,7 +83,7 @@ export const FormulaAndImageModal: React.FC<FormulaAndImageModalProps> = ({
       const file = item.getAsFile();
       if (!file) continue;
       try {
-        setPastedImage(await optimizeUploadedImage(file, 380));
+        setPastedImage(await readUploadedImage(file));
         setPasteError(null);
         return;
       } catch (error) {
@@ -101,7 +101,7 @@ export const FormulaAndImageModal: React.FC<FormulaAndImageModalProps> = ({
     );
     if (!file) return;
     try {
-      setPastedImage(await optimizeUploadedImage(file, 380));
+      setPastedImage(await readUploadedImage(file));
       setPasteError(null);
     } catch (error) {
       reportAppError(error, 'Bilddatei laden');
@@ -122,7 +122,7 @@ export const FormulaAndImageModal: React.FC<FormulaAndImageModalProps> = ({
           if (!type.startsWith('image/')) continue;
           const blob = await item.getType(type);
           const file = new File([blob], 'screenshot.png', { type });
-          setPastedImage(await optimizeUploadedImage(file, 380));
+          setPastedImage(await readUploadedImage(file));
           return;
         }
       }

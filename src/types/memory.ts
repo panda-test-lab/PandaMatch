@@ -6,6 +6,14 @@ export interface CardProperty {
   label: string; // e.g. 'Strukturformel', 'Wirkstoffname', 'Wirkstoffklasse', 'Indikation'
   content: string;
   type: CardContentType;
+  imageAssetId?: string;
+}
+
+export interface SetImageAsset {
+  id: string;
+  name: string;
+  content: string;
+  type: 'image';
 }
 
 export interface ConceptItem {
@@ -38,9 +46,11 @@ export interface CardSet {
   description: string;
   author?: string;
   category: string;
+  subcategory?: string;
   icon: string;
   color: string;
   pairs: CardPair[];
+  imageAssets?: SetImageAsset[];
   concepts?: ConceptItem[];
   availableProperties?: { key: string; label: string }[];
   isCustom?: boolean;

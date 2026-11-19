@@ -647,7 +647,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
                 </div>
               </div>
               <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-0.5">
-                <span>{cardSet.category}</span>
+                <span>{[cardSet.category, cardSet.subcategory].filter(Boolean).join(' · ')}</span>
                 <span aria-hidden="true">·</span>
                 <span>{diffConfig.label} ({totalConceptsRequired} Konzepte)</span>
                 <span aria-hidden="true">·</span>

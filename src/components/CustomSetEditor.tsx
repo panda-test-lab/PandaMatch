@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { CardPair, CardSet, CardContentType, CardProperty } from '../types/memory';
-import { optimizeUploadedImage } from '../utils/storage';
+import { CardPair, CardSet, CardContentType, CardProperty, SetImageAsset } from '../types/memory';
+import { readUploadedImage } from '../utils/storage';
 import { reportAppError } from '../utils/errorReporting';
 import {
   Upload,
@@ -29,6 +29,68 @@ interface CustomSetEditorProps {
 const isImageFile = (file: File) =>
   file.type.startsWith('image/') || /\.(avif|bmp|gif|jpe?g|png|svg|webp)$/i.test(file.name);
 
+const normalizeImageName = (name: string, fallback: string) =>
+  name.replace(/\.[^/.]+$/, '').trim().slice(0, 80) || fallback;
+
+const createImageAsset = (content: string, name: string, fallback: string): SetImageAsset => ({
+  id: `image_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+  name: normalizeImageName(name, fallback),
+  content,
+  type: 'image',
+});
+
+function prepareInitialImageData(
+  set: CardSet | null | undefined,
+  availableProperties: { key: string; label: string }[],
+) {
+  const imageAssets = [...(set?.imageAssets || [])];
+  const assetsByContent = new Map(imageAssets.map((asset) => [asset.content, asset]));
+
+  const findOrCreateAsset = (content: string, name: string) => {
+    if (!content.startsWith('data:image/')) return undefined;
+    const existing = assetsByContent.get(content);
+    if (existing) return existing;
+
+    const asset = createImageAsset(content, name, `Bild ${imageAssets.length + 1}`);
+    imageAssets.push(asset);
+    assetsByContent.set(content, asset);
+    return asset;
+  };
+
+  const pairs = (set?.pairs || []).map((pair) => {
+    const properties = { ...(pair.properties || {}) };
+
+    Object.entries(properties).forEach(([key, property]) => {
+      if (property.type !== 'image') return;
+      const asset = findOrCreateAsset(property.content, property.label || pair.title);
+      if (asset) properties[key] = { ...property, imageAssetId: asset.id };
+    });
+
+    availableProperties.forEach((metadata, index) => {
+      if (properties[metadata.key]) return;
+      const legacyProperty = index === 0 ? pair.cardA : index === 1 ? pair.cardB : undefined;
+      if (legacyProperty?.type !== 'image') return;
+      const asset = findOrCreateAsset(legacyProperty.content, legacyProperty.label || pair.title);
+      if (!asset) return;
+      properties[metadata.key] = {
+        id: `${pair.id}_${metadata.key}`,
+        key: metadata.key,
+        label: legacyProperty.label || metadata.label,
+        content: legacyProperty.content,
+        type: 'image',
+        imageAssetId: asset.id,
+      };
+    });
+
+    return {
+      ...pair,
+      properties: Object.keys(properties).length > 0 ? properties : pair.properties,
+    };
+  });
+
+  return { imageAssets, pairs };
+}
+
 export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
   initialSet,
   onSave,
@@ -37,23 +99,23 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
 }) => {
   const [title, setTitle] = useState(initialSet?.title || 'Mein Kartenset');
   const [category, setCategory] = useState(initialSet?.category || 'Eigene Sammlung');
+  const [subcategory, setSubcategory] = useState(initialSet?.subcategory || '');
   const [description, setDescription] = useState(initialSet?.description || '');
   const [author, setAuthor] = useState(initialSet?.author || '');
   const [icon, setIcon] = useState(initialSet?.icon || '🎴');
 
   // Available properties for multi-attribute matching (Requirement 3)
-  const [availableProperties, setAvailableProperties] = useState<{ key: string; label: string }[]>(() => {
-    if (initialSet?.availableProperties && initialSet.availableProperties.length >= 2) {
-      return initialSet.availableProperties;
-    }
-    return [
-      { key: 'prop_1', label: '1. Vorderseite' },
-      { key: 'prop_2', label: '2. Rückseite' },
-    ];
-  });
+  const initialAvailableProperties = initialSet?.availableProperties && initialSet.availableProperties.length >= 2
+    ? initialSet.availableProperties
+    : [
+        { key: 'prop_1', label: '1. Vorderseite' },
+        { key: 'prop_2', label: '2. Rückseite' },
+      ];
+  const [availableProperties, setAvailableProperties] = useState(initialAvailableProperties);
 
-  // Pairs state
-  const [pairs, setPairs] = useState<CardPair[]>(() => initialSet?.pairs || []);
+  const [initialImageData] = useState(() => prepareInitialImageData(initialSet, initialAvailableProperties));
+  const [imageAssets, setImageAssets] = useState<SetImageAsset[]>(initialImageData.imageAssets);
+  const [pairs, setPairs] = useState<CardPair[]>(initialImageData.pairs);
 
   const [isDraggingOverZone, setIsDraggingOverZone] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState(false);
@@ -111,33 +173,58 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
     );
   };
 
+  const addImageAsset = (content: string, name: string) => {
+    const existing = imageAssets.find((asset) => asset.content === content);
+    if (existing) return existing;
+
+    const asset = createImageAsset(content, name, `Bild ${imageAssets.length + 1}`);
+    setImageAssets((prev) =>
+      prev.some((item) => item.content === content) ? prev : [...prev, asset]
+    );
+    return asset;
+  };
+
+  const isImageAssetUsed = (assetId: string) =>
+    pairs.some((pair) =>
+      Object.values(pair.properties || {}).some((property) => property.imageAssetId === assetId)
+    );
+
+  const handleRenameImageAsset = (assetId: string, name: string) => {
+    setImageAssets((prev) =>
+      prev.map((asset) => (asset.id === assetId ? { ...asset, name } : asset))
+    );
+  };
+
+  const handleRemoveImageAsset = (assetId: string) => {
+    if (isImageAssetUsed(assetId)) return;
+    setImageAssets((prev) => prev.filter((asset) => asset.id !== assetId));
+  };
+
   // Process dropped/selected files
   const handleFiles = async (files: FileList | File[]) => {
     const imageFiles = Array.from(files).filter(isImageFile);
     if (imageFiles.length === 0) return;
 
     try {
-      const optimizedImages: { dataUrl: string; name: string }[] = [];
+      const uploadedImages: SetImageAsset[] = [];
       for (const file of imageFiles) {
-        const dataUrl = await optimizeUploadedImage(file, 260);
-        const cleanName = file.name.replace(/\.[^/.]+$/, '').slice(0, 24);
-        optimizedImages.push({ dataUrl, name: cleanName });
+        const dataUrl = await readUploadedImage(file);
+        uploadedImages.push(
+          createImageAsset(dataUrl, file.name, `Bild ${imageAssets.length + uploadedImages.length + 1}`)
+        );
       }
 
-      const pKey1 = availableProperties[0]?.key || 'prop_1';
-      const pKey2 = availableProperties[1]?.key || 'prop_2';
-
-      const newPairs: CardPair[] = optimizedImages.map((img, idx) => ({
-        id: `custom_pair_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 5)}`,
-        title: img.name || `Konzept ${pairs.length + idx + 1}`,
-        cardA: { content: img.dataUrl, type: 'image', label: img.name },
-        cardB: { content: img.dataUrl, type: 'image', label: img.name },
-        properties: {
-          [pKey1]: { id: `${idx}_1`, key: pKey1, label: availableProperties[0]?.label || 'Eigenschaft 1', content: img.dataUrl, type: 'image' },
-          [pKey2]: { id: `${idx}_2`, key: pKey2, label: availableProperties[1]?.label || 'Eigenschaft 2', content: img.name, type: 'text' },
-        },
-      }));
-      setPairs((prev) => [...prev, ...newPairs]);
+      setImageAssets((prev) => {
+        const existingContents = new Set(prev.map((asset) => asset.content));
+        return [
+          ...prev,
+          ...uploadedImages.filter((asset) => {
+            if (existingContents.has(asset.content)) return false;
+            existingContents.add(asset.content);
+            return true;
+          }),
+        ];
+      });
     } catch (err) {
       reportAppError(err, 'Hochgeladene Bilder verarbeiten');
     }
@@ -233,10 +320,12 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
       const file = e.dataTransfer.files[0];
       if (isImageFile(file)) {
         try {
-          const dataUrl = await optimizeUploadedImage(file, 260);
+          const dataUrl = await readUploadedImage(file);
+          const asset = addImageAsset(dataUrl, file.name);
           handleUpdateProperty(pairIndex, propKey, {
-            content: dataUrl,
+            content: asset.content,
             type: 'image',
+            imageAssetId: asset.id,
           });
         } catch (err) {
           reportAppError(err, 'Bild in Karteneigenschaft verarbeiten');
@@ -277,9 +366,11 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
       description: description.trim(),
       author: author.trim(),
       category: category.trim() || 'Pharmazie & Naturwissenschaften',
+      subcategory: subcategory.trim() || undefined,
       icon: icon.trim() || '🔬',
       color: 'emerald',
       pairs: formattedPairs,
+      imageAssets,
       availableProperties,
       isCustom: true,
       createdAt: initialSet?.createdAt || new Date().toISOString(),
@@ -374,12 +465,25 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
 
         <div>
           <label className="block text-xs font-bold text-slate-900 dark:text-slate-300 mb-1">
-            Kategorie / Fachgebiet
+            Fachgebiet
           </label>
           <input
             type="text"
             value={category}
             onChange={(e) => setCategory(e.target.value)}
+            className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-200 dark:bg-slate-950 text-slate-950 dark:text-white placeholder:text-slate-600 dark:placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold text-slate-900 dark:text-slate-300 mb-1">
+            Teilgebiet (optional)
+          </label>
+          <input
+            type="text"
+            value={subcategory}
+            onChange={(e) => setSubcategory(e.target.value)}
+            placeholder="z. B. Botanik oder Pharmakologie"
             className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-200 dark:bg-slate-950 text-slate-950 dark:text-white placeholder:text-slate-600 dark:placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
           />
         </div>
@@ -395,6 +499,20 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
             placeholder="Name des Autors"
             className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-200 dark:bg-slate-950 text-slate-950 dark:text-white placeholder:text-slate-600 dark:placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
           />
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold text-slate-900 dark:text-slate-300 mb-1">
+            Letzte Änderung (automatisch)
+          </label>
+          <p className="rounded-xl border border-slate-300 bg-slate-200 px-3.5 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300">
+            {initialSet?.updatedAt && !Number.isNaN(Date.parse(initialSet.updatedAt))
+              ? new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(initialSet.updatedAt))
+              : 'Wird beim ersten Speichern gesetzt'}
+          </p>
+          <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">
+            Wird bei jeder Speicherung automatisch aktualisiert.
+          </p>
         </div>
 
         <div className="sm:col-span-2 lg:col-span-3">
@@ -542,12 +660,69 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
         </div>
 
         <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
-          Bilddateien hier ablegen (Drag & Drop)
+          Bilder zur Set-Bildsammlung hinzufügen
         </h3>
         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 max-w-md">
-          Bilder (Strukturformeln, Pflanzenfotos, Diagramme) werden automatisch skaliert.
+          Bilder werden skaliert und können anschließend über ihren Namen einzelnen Karteneigenschaften zugeordnet werden.
         </p>
       </div>
+
+      <section
+        aria-label="Set-Bildsammlung"
+        className="rounded-3xl border border-slate-300 bg-slate-50 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+      >
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
+              Bilder im Set ({imageAssets.length})
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Vergib gut erkennbare Namen; verwendete Bilder lassen sich erst nach dem Entfernen aus den Karten löschen.
+            </p>
+          </div>
+        </div>
+        {imageAssets.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-slate-300 p-4 text-center text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+            Noch keine Bilder hinzugefügt.
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {imageAssets.map((asset) => {
+              const isUsed = isImageAssetUsed(asset.id);
+              return (
+                <div
+                  key={asset.id}
+                  className="flex min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-white p-2 dark:border-slate-800 dark:bg-slate-950"
+                >
+                  <img
+                    src={asset.content}
+                    alt={asset.name || 'Bildvorschau'}
+                    className="h-12 w-12 shrink-0 rounded-lg bg-slate-100 object-contain dark:bg-slate-900"
+                  />
+                  <input
+                    type="text"
+                    value={asset.name}
+                    onChange={(event) => handleRenameImageAsset(asset.id, event.target.value)}
+                    aria-label={`Name für Bild ${asset.name || 'ohne Namen'}`}
+                    placeholder="Lesbarer Bildname"
+                    className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-slate-100 px-2 py-1.5 text-xs font-semibold text-slate-900 outline-none focus:ring-1 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveImageAsset(asset.id)}
+                    disabled={isUsed}
+                    title={isUsed ? 'Wird noch in einer Karte verwendet' : 'Bild aus dem Set entfernen'}
+                    aria-label={`${asset.name || 'Bild'} aus dem Set entfernen`}
+                    className="shrink-0 rounded-lg p-2 text-slate-500 transition-colors hover:bg-rose-100 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-rose-950/50"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       {/* Concept Items List Header */}
       <div className="flex items-center justify-between">
@@ -574,7 +749,7 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
       <div className="space-y-4">
         {pairs.length === 0 && (
           <p className="rounded-2xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-600 dark:border-slate-700 dark:text-slate-400">
-            Dieses Set enthält noch keine Konzepte. Füge ein Konzept hinzu oder ziehe Bilder in den Bildbereich, um zu beginnen.
+            Dieses Set enthält noch keine Konzepte. Füge ein Konzept hinzu und ordne bei Bedarf Bilder aus der Set-Bildsammlung zu.
           </p>
         )}
         {pairs.map((pair, idx) => (
@@ -657,11 +832,15 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
                           dangerouslySetInnerHTML={{ __html: prop.content }}
                         />
                       ) : prop.type === 'image' ? (
-                        <img
-                          src={prop.content}
-                          alt={pMeta.label}
-                          className="w-full h-full object-contain"
-                        />
+                        prop.content ? (
+                          <img
+                            src={prop.content}
+                            alt={imageAssets.find((asset) => asset.id === prop.imageAssetId)?.name || pMeta.label}
+                            className="w-full h-full object-contain"
+                          />
+                        ) : (
+                          <span className="text-xs text-slate-500 dark:text-slate-400">Bild auswählen</span>
+                        )
                       ) : prop.type === 'emoji' ? (
                         <span className="text-3xl select-none">{prop.content}</span>
                       ) : (
@@ -677,7 +856,24 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
                         <button
                           key={t}
                           type="button"
-                          onClick={() => handleUpdateProperty(idx, pMeta.key, { type: t })}
+                          onClick={() => {
+                            if (t === 'image') {
+                              const asset = imageAssets.find((item) =>
+                                item.id === prop.imageAssetId || item.content === prop.content
+                              );
+                              handleUpdateProperty(idx, pMeta.key, {
+                                type: t,
+                                content: asset?.content || '',
+                                imageAssetId: asset?.id,
+                              });
+                            } else {
+                              handleUpdateProperty(idx, pMeta.key, {
+                                content: prop.type === 'image' ? '' : prop.content,
+                                type: t,
+                                imageAssetId: undefined,
+                              });
+                            }
+                          }}
                           className={`flex-1 py-0.5 rounded text-center transition-colors cursor-pointer ${
                             prop.type === t
                               ? 'bg-emerald-600 text-white shadow-xs'
@@ -725,26 +921,64 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
                         label="Karten-Emoji"
                       />
                     )}
-                    <input
-                      type="text"
-                      value={prop.content}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        let inferredType = prop.type;
-                        if (val.startsWith('data:image')) inferredType = 'image';
-                        else if (val.includes('\\') || val.includes('_') || val.includes('^')) inferredType = 'latex';
-                        handleUpdateProperty(idx, pMeta.key, {
-                          content: val,
-                          type: inferredType,
-                        });
-                      }}
-                      placeholder={
-                        prop.type === 'latex'
-                          ? 'LaTeX z.B. \\mathrm{C_9H_8O_4}'
-                          : 'Inhalt (Text, Begriff, Emoji)'
-                      }
-                      className="w-full px-2.5 py-1 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-200 dark:bg-slate-950 text-slate-950 dark:text-slate-100 placeholder:text-slate-600 dark:placeholder:text-slate-400 font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                    />
+                    {prop.type === 'image' ? (
+                      imageAssets.length > 0 ? (
+                        <select
+                          value={imageAssets.some((asset) => asset.id === prop.imageAssetId) ? prop.imageAssetId : ''}
+                          aria-label={`Bild für ${pMeta.label} auswählen`}
+                          onChange={(event) => {
+                            const asset = imageAssets.find((item) => item.id === event.target.value);
+                            if (asset) {
+                              handleUpdateProperty(idx, pMeta.key, {
+                                content: asset.content,
+                                imageAssetId: asset.id,
+                              });
+                            }
+                          }}
+                          className="w-full rounded-lg border border-slate-300 bg-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-950 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                        >
+                          <option value="">Bild auswählen…</option>
+                          {imageAssets.map((asset) => (
+                            <option key={asset.id} value={asset.id}>
+                              {asset.name || 'Unbenanntes Bild'}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <p className="rounded-lg border border-dashed border-slate-300 px-2.5 py-2 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                          Füge zuerst oben ein Bild zur Set-Bildsammlung hinzu.
+                        </p>
+                      )
+                    ) : (
+                      <input
+                        type="text"
+                        value={prop.content}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          let inferredType = prop.type;
+                          if (val.startsWith('data:image')) {
+                            const asset = addImageAsset(val, pMeta.label);
+                            handleUpdateProperty(idx, pMeta.key, {
+                              content: asset.content,
+                              type: 'image',
+                              imageAssetId: asset.id,
+                            });
+                            return;
+                          }
+                          if (val.includes('\\') || val.includes('_') || val.includes('^')) inferredType = 'latex';
+                          handleUpdateProperty(idx, pMeta.key, {
+                            content: val,
+                            type: inferredType,
+                          });
+                        }}
+                        placeholder={
+                          prop.type === 'latex'
+                            ? 'LaTeX z.B. \\mathrm{C_9H_8O_4}'
+                            : 'Inhalt (Text, Begriff, Emoji)'
+                        }
+                        className="w-full px-2.5 py-1 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-200 dark:bg-slate-950 text-slate-950 dark:text-slate-100 placeholder:text-slate-600 dark:placeholder:text-slate-400 font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      />
+                    )}
                   </div>
                 );
               })}
@@ -766,10 +1000,20 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
             pairs[modalTarget.pairIdx]?.properties?.[modalTarget.propKey]?.label || ''
           }
           onApply={(data) => {
-            handleUpdateProperty(modalTarget.pairIdx, modalTarget.propKey, {
-              content: data.content,
-              type: data.type,
-            });
+            if (data.type === 'image') {
+              const asset = addImageAsset(data.content, data.label || 'Eingefügtes Bild');
+              handleUpdateProperty(modalTarget.pairIdx, modalTarget.propKey, {
+                content: asset.content,
+                type: 'image',
+                imageAssetId: asset.id,
+              });
+            } else {
+              handleUpdateProperty(modalTarget.pairIdx, modalTarget.propKey, {
+                content: data.content,
+                type: data.type,
+                imageAssetId: undefined,
+              });
+            }
             setModalTarget(null);
           }}
         />

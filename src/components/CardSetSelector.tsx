@@ -81,7 +81,8 @@ export const CardSetSelector: React.FC<CardSetSelectorProps> = ({
       const matchTitle = set.title.toLowerCase().includes(q);
       const matchDesc = set.description.toLowerCase().includes(q);
       const matchCat = set.category.toLowerCase().includes(q);
-      return matchTitle || matchDesc || matchCat;
+      const matchSubcategory = set.subcategory?.toLowerCase().includes(q) ?? false;
+      return matchTitle || matchDesc || matchCat || matchSubcategory;
     }
     return true;
   });
@@ -383,7 +384,9 @@ export const CardSetSelector: React.FC<CardSetSelectorProps> = ({
                           {set.title}
                         </h3>
                         <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">
-                          <span className="break-words">{set.category}</span>
+                          <span className="break-words">
+                            {[set.category, set.subcategory].filter(Boolean).join(' · ')}
+                          </span>
                           <span aria-hidden="true">·</span>
                           <span className="font-mono tabular-nums font-bold">{set.pairs.length} Paare</span>
                           <span aria-hidden="true">·</span>

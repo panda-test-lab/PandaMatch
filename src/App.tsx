@@ -76,6 +76,7 @@ export default function App() {
   // Pre-Game Setup Modal state
   const [gameSetupConfig, setGameSetupConfig] = useState<GameSetupConfig | null>(null);
   const [trainerSetupMode, setTrainerSetupMode] = useState<'recall' | 'drawing' | null>(null);
+  const [drawingPropertyKeys, setDrawingPropertyKeys] = useState<string[]>([]);
   const [isTourOpen, setIsTourOpen] = useState(false);
 
   // Card Sets state - all sets are editable and deletable
@@ -503,6 +504,7 @@ export default function App() {
             cardSet={activeCardSet}
             onExit={handleGoBack}
             theme={theme}
+            selectedPropertyKeys={drawingPropertyKeys}
           />
         )}
 
@@ -591,9 +593,10 @@ export default function App() {
           onClose={() => setTrainerSetupMode(null)}
           mode={trainerSetupMode}
           allSets={allAvailableSets}
-          onStartTrainer={(chosenSet) => {
+          onStartTrainer={(chosenSet, selectedPropertyKeys) => {
             setActiveCardSet(chosenSet);
             const target = trainerSetupMode;
+            if (target === 'drawing') setDrawingPropertyKeys(selectedPropertyKeys || []);
             setTrainerSetupMode(null);
             if (target) navigateTo(target);
           }}

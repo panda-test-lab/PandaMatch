@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { CardSet, CardProperty, CardItem, CardContentType } from '../types/memory';
+import { CardSet, CardPair, CardProperty, CardItem, CardContentType } from '../types/memory';
 import { recordConceptReview, sampleWeightedConcepts, getSetMasterySummary } from '../utils/learningStorage';
 import { sound } from '../utils/sound';
 import { CardZoomModal } from './CardZoomModal';
 import { LatexRenderer } from './LatexRenderer';
+import { isUnavailableContent } from '../utils/unavailableContent';
 import {
   Brain,
   CheckCircle2,
@@ -23,6 +24,9 @@ interface ActiveRecallTrainerProps {
 
 interface ChoiceItem {
   conceptId: string;
+  conceptTitle: string;
+  propertyKey: string;
+  propertyLabel: string;
   content: string;
   type: CardContentType;
 }
@@ -33,6 +37,49 @@ interface RecallStepData {
   promptProp: CardProperty;
   targetProp: CardProperty;
   choices: ChoiceItem[];
+}
+
+function getPairProperty(
+  pair: CardPair,
+  key: string,
+  role: 'prompt' | 'target',
+  availableProperties: { key: string; label: string }[],
+): CardProperty {
+  const property = pair.properties?.[key];
+  if (property) return property;
+
+  const side = key === 'A' || key === 'B'
+    ? key
+    : role === 'prompt' ? 'A' : 'B';
+  const card = side === 'A' ? pair.cardA : pair.cardB;
+  return {
+    id: `${pair.id}_${side}`,
+    key,
+    label: card.label || availableProperties.find((item) => item.key === key)?.label || '',
+    content: card.content,
+    type: card.type,
+  };
+}
+
+function createZoomCard(
+  conceptId: string,
+  conceptTitle: string,
+  property: CardProperty,
+  side: 'A' | 'B',
+): CardItem {
+  return {
+    id: `${conceptId}_${property.id}`,
+    conceptId,
+    pairId: conceptId,
+    propertyKey: property.key,
+    propertyLabel: property.label,
+    side,
+    content: property.content,
+    type: property.type,
+    label: conceptTitle,
+    isFlipped: true,
+    isMatched: false,
+  };
 }
 
 export const ActiveRecallTrainer: React.FC<ActiveRecallTrainerProps> = ({
@@ -49,6 +96,7 @@ export const ActiveRecallTrainer: React.FC<ActiveRecallTrainerProps> = ({
   }>({ correct: 0, uncertain: 0, incorrect: 0 });
   const [isSessionFinished, setIsSessionFinished] = useState(false);
   const [zoomedCard, setZoomedCard] = useState<CardItem | null>(null);
+  const [hasAvailableCards, setHasAvailableCards] = useState(true);
 
   // Available property keys
   const availableProperties = useMemo(() => {
@@ -61,7 +109,7 @@ export const ActiveRecallTrainer: React.FC<ActiveRecallTrainerProps> = ({
     ];
   }, [cardSet]);
 
-  const [promptKey, setPromptKey] = useState<string>(() => availableProperties[0].key);
+  const promptKey = availableProperties[0].key;
   const [targetKey, setTargetKey] = useState<string>(() => availableProperties[1].key);
   const [shuffleCards, setShuffleCards] = useState(true);
 
@@ -70,57 +118,28 @@ export const ActiveRecallTrainer: React.FC<ActiveRecallTrainerProps> = ({
     return availableProperties.filter((p) => p.key !== promptKey);
   }, [availableProperties, promptKey]);
 
-  // Handle promptKey change: automatically adjust targetKey if it matches
-  const handlePromptKeyChange = (newPromptKey: string) => {
-    setPromptKey(newPromptKey);
-    if (targetKey === newPromptKey) {
-      const nextTarget = availableProperties.find((p) => p.key !== newPromptKey);
-      if (nextTarget) {
-        setTargetKey(nextTarget.key);
-      }
-    }
-  };
-
   // Build deck with Spaced Repetition sampling
   const initSession = () => {
-    const rawPairs = cardSet.pairs;
-    if (rawPairs.length === 0) return;
+    const rawPairs = cardSet.pairs.filter((pair) => {
+      const prompt = getPairProperty(pair, promptKey, 'prompt', availableProperties);
+      const target = getPairProperty(pair, targetKey, 'target', availableProperties);
+      return !isUnavailableContent(prompt.content) && !isUnavailableContent(target.content);
+    });
+    setHasAvailableCards(rawPairs.length > 0);
+    if (rawPairs.length === 0) {
+      setDeck([]);
+      setCurrentIndex(0);
+      setSelectedChoiceId(null);
+      setIsSessionFinished(false);
+      return;
+    }
 
     // Pick cards using weighted sampling (struggling cards appear more often)
     const sampledConcepts = sampleWeightedConcepts(rawPairs, Math.min(10, rawPairs.length), cardSet.id);
 
     const steps: RecallStepData[] = sampledConcepts.map((concept) => {
-      // Find prompt property
-      const promptProp: CardProperty =
-        concept.properties?.[promptKey] || (promptKey === 'A' ? {
-          id: `${concept.id}_A`,
-          key: 'A',
-          label: concept.cardA.label || 'Gegeben',
-          content: concept.cardA.content,
-          type: concept.cardA.type,
-        } : {
-          id: `${concept.id}_B`,
-          key: 'B',
-          label: concept.cardB.label || 'Gegeben',
-          content: concept.cardB.content,
-          type: concept.cardB.type,
-        });
-
-      // Find target answer property
-      const targetProp: CardProperty =
-        concept.properties?.[targetKey] || (targetKey === 'B' ? {
-          id: `${concept.id}_B`,
-          key: 'B',
-          label: concept.cardB.label || 'Gesucht',
-          content: concept.cardB.content,
-          type: concept.cardB.type,
-        } : {
-          id: `${concept.id}_A`,
-          key: 'A',
-          label: concept.cardA.label || 'Gesucht',
-          content: concept.cardA.content,
-          type: concept.cardA.type,
-        });
+      const promptProp = getPairProperty(concept, promptKey, 'prompt', availableProperties);
+      const targetProp = getPairProperty(concept, targetKey, 'target', availableProperties);
 
       // Distractors for multiple-choice
       const otherConcepts = rawPairs.filter((p) => p.id !== concept.id);
@@ -130,13 +149,19 @@ export const ActiveRecallTrainer: React.FC<ActiveRecallTrainerProps> = ({
       const allChoices: ChoiceItem[] = [
         {
           conceptId: concept.id,
+          conceptTitle: concept.title,
+          propertyKey: targetKey,
+          propertyLabel: targetProp.label,
           content: targetProp.content,
           type: targetProp.type,
         },
         ...distractorPicks.map((d) => {
-          const dProp = d.properties?.[targetKey] || (targetKey === 'B' ? d.cardB : d.cardA);
+          const dProp = getPairProperty(d, targetKey, 'target', availableProperties);
           return {
             conceptId: d.id,
+            conceptTitle: d.title,
+            propertyKey: targetKey,
+            propertyLabel: dProp.label,
             content: dProp.content,
             type: dProp.type,
           };
@@ -298,24 +323,9 @@ export const ActiveRecallTrainer: React.FC<ActiveRecallTrainerProps> = ({
         </div>
       </div>
 
-      {/* Property Configuration Bar: Gegeben vs. Gesucht (NEVER EQUAL!) */}
+      {/* Target property configuration */}
       {availableProperties.length >= 2 && (
         <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl bg-slate-200/80 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="font-extrabold text-slate-950 dark:text-slate-200">Gegeben:</span>
-            <select
-              value={promptKey}
-              onChange={(e) => handlePromptKeyChange(e.target.value)}
-              className="px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-200 dark:bg-slate-900 font-bold text-slate-950 dark:text-slate-100 shadow-xs cursor-pointer focus:ring-2 focus:ring-emerald-500"
-            >
-              {availableProperties.map((p) => (
-                <option key={p.key} value={p.key}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
           <div className="flex items-center gap-2">
             <span className="font-extrabold text-slate-950 dark:text-slate-200">Gesucht:</span>
             <select
@@ -417,29 +427,18 @@ export const ActiveRecallTrainer: React.FC<ActiveRecallTrainerProps> = ({
 
           {/* Prompt Card (Gegeben) */}
           <div className="p-6 sm:p-7 rounded-3xl bg-slate-50 dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 shadow-md flex flex-col items-center text-center">
-            <div className="text-xs uppercase font-extrabold tracking-wider text-emerald-800 dark:text-emerald-400 mb-1">
-              Gegeben: {currentItem.promptProp.label}
-            </div>
-
             {/* Visual Box */}
             <div className="recall-prompt-visual w-full max-w-[280px] sm:max-w-[340px] aspect-square rounded-2xl border-2 border-slate-300 dark:border-slate-800 bg-slate-200 dark:bg-slate-950 flex items-center justify-center p-3 shadow-inner my-2 overflow-hidden relative group">
               <button
                 type="button"
-                onClick={() =>
-                  setZoomedCard({
-                    id: currentItem.conceptId,
-                    conceptId: currentItem.conceptId,
-                    pairId: currentItem.conceptId,
-                    propertyKey: currentItem.promptProp.key,
-                    propertyLabel: currentItem.promptProp.label,
-                    side: 'A',
-                    content: currentItem.promptProp.content,
-                    type: currentItem.promptProp.type,
-                    label: currentItem.conceptTitle,
-                    isFlipped: true,
-                    isMatched: false,
-                  })
-                }
+                onClick={() => setZoomedCard(
+                  createZoomCard(
+                    currentItem.conceptId,
+                    currentItem.conceptTitle,
+                    currentItem.promptProp,
+                    'A',
+                  )
+                )}
                 title="Vergrößern (Zoom)"
                 className="absolute top-2 right-2 p-1.5 rounded-lg bg-slate-100/90 dark:bg-slate-800/90 text-slate-800 dark:text-slate-300 hover:text-emerald-600 transition-colors shadow-xs cursor-pointer"
               >
@@ -491,25 +490,31 @@ export const ActiveRecallTrainer: React.FC<ActiveRecallTrainerProps> = ({
                   }
 
                   return (
-                    <button
+                    <div
                       key={cIdx}
-                      disabled={selectedChoiceId !== null}
-                      onClick={() => handleChoiceSelect(choice.conceptId)}
                       className={`p-3 rounded-2xl text-left text-xs sm:text-sm font-semibold transition-all relative cursor-pointer ${btnStyle}`}
                     >
+                      <button
+                        type="button"
+                        disabled={selectedChoiceId !== null}
+                        aria-label={`Antwort ${choice.conceptTitle} auswählen`}
+                        aria-pressed={isSelected}
+                        onClick={() => handleChoiceSelect(choice.conceptId)}
+                        className="absolute inset-0 z-0 h-full w-full rounded-2xl bg-transparent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500 disabled:cursor-default"
+                      />
                       {/* Status Checkmark / Cross after selection */}
                       {selectedChoiceId !== null && isTarget && (
-                        <div className="absolute top-2 right-2 text-emerald-800 dark:text-emerald-400 font-extrabold text-xs flex items-center gap-0.5">
+                        <div className="pointer-events-none absolute top-2 right-2 z-10 text-emerald-800 dark:text-emerald-400 font-extrabold text-xs flex items-center gap-0.5">
                           <span>✓ Richtig</span>
                         </div>
                       )}
                       {selectedChoiceId !== null && isSelected && !isTarget && (
-                        <div className="absolute top-2 right-2 text-rose-700 dark:text-rose-400 font-extrabold text-xs flex items-center gap-0.5">
+                        <div className="pointer-events-none absolute top-2 right-2 z-10 text-rose-700 dark:text-rose-400 font-extrabold text-xs flex items-center gap-0.5">
                           <span>✕ Falsch</span>
                         </div>
                       )}
 
-                      <div className="pr-12">
+                      <div className="relative z-10 pr-12 pointer-events-none">
                         {choice.type === 'latex' ? (
                           <LatexRenderer latex={choice.content} displayMode={false} />
                         ) : choice.type === 'svg' ? (
@@ -529,7 +534,31 @@ export const ActiveRecallTrainer: React.FC<ActiveRecallTrainerProps> = ({
                           </span>
                         )}
                       </div>
-                    </button>
+                      {choice.type === 'image' && (
+                        <button
+                          type="button"
+                          aria-label={`${choice.conceptTitle}: Bild vergrößern`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setZoomedCard(createZoomCard(
+                              choice.conceptId,
+                              choice.conceptTitle,
+                              {
+                                id: `${choice.conceptId}_${choice.propertyKey}`,
+                                key: choice.propertyKey,
+                                label: choice.propertyLabel,
+                                content: choice.content,
+                                type: choice.type,
+                              },
+                              'B',
+                            ));
+                          }}
+                          className="absolute bottom-2 right-2 z-20 rounded-lg bg-slate-100/90 p-1.5 text-slate-800 shadow-xs transition-colors hover:text-emerald-600 dark:bg-slate-800/90 dark:text-slate-300"
+                        >
+                          <ZoomIn className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
                   );
                 })}
               </div>
@@ -542,13 +571,36 @@ export const ActiveRecallTrainer: React.FC<ActiveRecallTrainerProps> = ({
                       <div className="text-[11px] uppercase font-extrabold tracking-wider text-emerald-700 dark:text-emerald-400">
                         Offizielle Lösung ({currentItem.targetProp.label}):
                       </div>
-                      <div className="text-base sm:text-lg font-extrabold text-slate-950 dark:text-white mt-0.5">
+                      {currentItem.targetProp.type === 'image' ? (
+                        <div className="relative mt-1 h-28 w-28">
+                          {renderContentVisual(
+                            currentItem.targetProp.content,
+                            currentItem.targetProp.type,
+                            currentItem.conceptTitle,
+                          )}
+                          <button
+                            type="button"
+                            aria-label="Lösungsbild vergrößern"
+                            onClick={() => setZoomedCard(createZoomCard(
+                              currentItem.conceptId,
+                              currentItem.conceptTitle,
+                              currentItem.targetProp,
+                              'B',
+                            ))}
+                            className="absolute bottom-1 right-1 rounded-lg bg-slate-100/90 p-1.5 text-slate-800 shadow-xs transition-colors hover:text-emerald-600 dark:bg-slate-800/90 dark:text-slate-300"
+                          >
+                            <ZoomIn className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="text-base sm:text-lg font-extrabold text-slate-950 dark:text-white mt-0.5">
                         {currentItem.targetProp.type === 'latex' ? (
                           <LatexRenderer latex={currentItem.targetProp.content} displayMode={false} />
                         ) : (
                           currentItem.targetProp.content
                         )}
-                      </div>
+                        </div>
+                      )}
                     </div>
 
                     <div className="text-right">
@@ -616,6 +668,10 @@ export const ActiveRecallTrainer: React.FC<ActiveRecallTrainerProps> = ({
               )}
             </div>
           </div>
+        </div>
+      ) : !hasAvailableCards ? (
+        <div className="rounded-3xl border-2 border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+          Für diese Auswahl gibt es keine abfragbaren Karten. Karten mit Angaben wie „nicht vorhanden“ oder „nicht möglich“ wurden ausgelassen.
         </div>
       ) : null}
 

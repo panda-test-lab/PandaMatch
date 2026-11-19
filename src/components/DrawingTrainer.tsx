@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { CardSet, SelfAssessmentRating, CardProperty, CardContentType } from '../types/memory';
+import { CardSet, SelfAssessmentRating, CardProperty, CardContentType, CardItem } from '../types/memory';
 import { recordConceptReview, sampleWeightedConcepts, getSetMasterySummary } from '../utils/learningStorage';
 import { sound } from '../utils/sound';
 import { LatexRenderer } from './LatexRenderer';
-import { getDrawingProperty } from '../utils/drawingMode';
+import { CardZoomModal } from './CardZoomModal';
+import { getDrawingProperties, getDrawingPropertyOptions } from '../utils/drawingMode';
 import {
   PenTool,
   RotateCcw,
@@ -14,12 +15,14 @@ import {
   Eraser,
   Trash2,
   ArrowRight,
+  ZoomIn,
 } from 'lucide-react';
 
 interface DrawingTrainerProps {
   cardSet: CardSet;
   onExit: () => void;
   theme: 'light' | 'dark';
+  selectedPropertyKeys: string[];
 }
 
 interface DrawingStepData {
@@ -33,6 +36,7 @@ export const DrawingTrainer: React.FC<DrawingTrainerProps> = ({
   cardSet,
   onExit,
   theme,
+  selectedPropertyKeys,
 }) => {
   const [deck, setDeck] = useState<DrawingStepData[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -43,6 +47,7 @@ export const DrawingTrainer: React.FC<DrawingTrainerProps> = ({
     incorrect: number;
   }>({ correct: 0, uncertain: 0, incorrect: 0 });
   const [isSessionFinished, setIsSessionFinished] = useState(false);
+  const [zoomedCard, setZoomedCard] = useState<CardItem | null>(null);
 
   // Canvas drawing state
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -59,14 +64,18 @@ export const DrawingTrainer: React.FC<DrawingTrainerProps> = ({
 
   // Initialize session with weighted Spaced Repetition concepts
   const initSession = () => {
+    const activePropertyKeys = selectedPropertyKeys.length > 0
+      ? selectedPropertyKeys
+      : getDrawingPropertyOptions(cardSet).map((property) => property.key);
     const rawPairs = cardSet.pairs.filter((pair) =>
-      getDrawingProperty(pair, cardSet.availableProperties)
+      getDrawingProperties(pair, cardSet.availableProperties)
+        .some((property) => activePropertyKeys.includes(property.key))
     );
     if (rawPairs.length === 0) return;
 
     const sampled = sampleWeightedConcepts(rawPairs, Math.min(10, rawPairs.length), cardSet.id);
 
-    const steps: DrawingStepData[] = sampled.map((concept) => {
+    const steps: DrawingStepData[] = sampled.flatMap((concept) => {
       // Prompt is usually the drug name / title
       const promptProp: CardProperty = {
         id: `${concept.id}_title`,
@@ -76,16 +85,15 @@ export const DrawingTrainer: React.FC<DrawingTrainerProps> = ({
         type: 'text',
       };
 
-      const targetProp = getDrawingProperty(concept, cardSet.availableProperties);
-      if (!targetProp) return null;
-
-      return {
+      return getDrawingProperties(concept, cardSet.availableProperties)
+        .filter((property) => activePropertyKeys.includes(property.key))
+        .map((targetProp) => ({
         conceptId: concept.id,
         conceptTitle: concept.title,
         promptProp,
         targetProp,
-      };
-    }).filter((step): step is DrawingStepData => step !== null);
+      }));
+    });
 
     setDeck(steps);
     setCurrentIndex(0);
@@ -98,7 +106,7 @@ export const DrawingTrainer: React.FC<DrawingTrainerProps> = ({
 
   useEffect(() => {
     initSession();
-  }, [cardSet]);
+  }, [cardSet, selectedPropertyKeys]);
 
   const currentItem = deck[currentIndex];
   const summary = getSetMasterySummary(
@@ -460,8 +468,30 @@ export const DrawingTrainer: React.FC<DrawingTrainerProps> = ({
                     <span className="text-[11px] uppercase font-extrabold tracking-wider text-slate-700 dark:text-slate-400">
                       Offizielle Lösung ({currentItem.targetProp.label}):
                     </span>
-                    <div className="w-full aspect-[4/3] rounded-2xl bg-slate-200 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 flex items-center justify-center p-3 shadow-sm mt-1">
+                    <div className="relative w-full aspect-[4/3] rounded-2xl bg-slate-200 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 flex items-center justify-center p-3 shadow-sm mt-1">
                       {renderTargetVisual(currentItem.targetProp.content, currentItem.targetProp.type)}
+                      {currentItem.targetProp.type === 'image' && (
+                        <button
+                          type="button"
+                          aria-label="Lösungsbild vergrößern"
+                          onClick={() => setZoomedCard({
+                            id: currentItem.conceptId,
+                            conceptId: currentItem.conceptId,
+                            pairId: currentItem.conceptId,
+                            propertyKey: currentItem.targetProp.key,
+                            propertyLabel: currentItem.targetProp.label,
+                            side: 'B',
+                            content: currentItem.targetProp.content,
+                            type: currentItem.targetProp.type,
+                            label: currentItem.conceptTitle,
+                            isFlipped: true,
+                            isMatched: false,
+                          })}
+                          className="absolute right-2 top-2 rounded-lg bg-slate-100/90 p-1.5 text-slate-800 shadow-xs transition-colors hover:text-emerald-600 dark:bg-slate-800/90 dark:text-slate-300"
+                        >
+                          <ZoomIn className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -508,6 +538,7 @@ export const DrawingTrainer: React.FC<DrawingTrainerProps> = ({
           </div>
         </div>
       ) : null}
+      <CardZoomModal card={zoomedCard} onClose={() => setZoomedCard(null)} />
     </div>
   );
 };
