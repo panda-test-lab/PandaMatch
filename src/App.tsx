@@ -42,7 +42,7 @@ import {
 } from './utils/storage';
 import { sound } from './utils/sound';
 import { reportAppError } from './utils/errorReporting';
-import { checkForAppUpdate } from './utils/appUpdater';
+import { AvailableAppUpdate, checkForAppUpdate, downloadAndInstallAppUpdate } from './utils/appUpdater';
 import {
   acceptSuggestedSetsStorage,
   chooseSetsStorage,
@@ -68,6 +68,7 @@ const EMPTY_CARD_SET: CardSet = {
 export default function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
   const [isMuted, setIsMuted] = useState(false);
+  const [availableUpdate, setAvailableUpdate] = useState<AvailableAppUpdate | null>(null);
 
   // Initial tab is the game-typical main menu
   const [activeTab, setActiveTab] = useState<ActiveTab>('menu');
@@ -154,7 +155,9 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    void checkForAppUpdate().catch((error: unknown) => {
+    void checkForAppUpdate().then((update) => {
+      if (update) setAvailableUpdate(update);
+    }).catch((error: unknown) => {
       reportAppError(error, 'Update-Prüfung fehlgeschlagen');
     });
   }, []);
@@ -688,6 +691,35 @@ export default function App() {
       )}
 
       {/* Clean, quiet Footer with Version Chip from tauri.conf.json */}
+      {availableUpdate && (
+        <aside
+          role="status"
+          className="mx-auto mb-3 flex w-[calc(100%-2rem)] max-w-7xl flex-col gap-2 rounded-2xl border border-sky-300 bg-sky-50 px-4 py-3 text-sm text-sky-950 shadow-sm dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-100 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div>
+            <strong>Update verfügbar: v{availableUpdate.version}</strong>
+            {availableUpdate.body && (
+              <span className="mt-0.5 block max-w-3xl text-xs opacity-80">{availableUpdate.body}</span>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setAvailableUpdate(null)}
+              className="rounded-xl border border-sky-300 px-3 py-1.5 text-xs font-bold hover:bg-sky-100 dark:border-sky-700 dark:hover:bg-sky-900"
+            >
+              Später
+            </button>
+            <button
+              type="button"
+              onClick={() => void downloadAndInstallAppUpdate()}
+              className="rounded-xl bg-sky-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-sky-500"
+            >
+              Herunterladen & installieren
+            </button>
+          </div>
+        </aside>
+      )}
       <footer className="mt-auto border-t border-slate-200 dark:border-slate-800/80 py-4 px-6 text-xs text-slate-500 dark:text-slate-400">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 flex-wrap justify-center sm:justify-start">

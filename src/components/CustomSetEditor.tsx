@@ -26,6 +26,27 @@ interface CustomSetEditorProps {
   onPlayDirectly: (set: CardSet) => void;
 }
 
+interface SavedSetTemplate {
+  name: string;
+  category: string;
+  subcategory: string;
+  description: string;
+  author: string;
+  icon: string;
+  availableProperties: { key: string; label: string }[];
+}
+
+const SET_TEMPLATES_KEY = 'pandamatch_set_templates';
+
+const loadSetTemplates = (): SavedSetTemplate[] => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SET_TEMPLATES_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed.filter((item) => item && typeof item.name === 'string') : [];
+  } catch {
+    return [];
+  }
+};
+
 const isImageFile = (file: File) =>
   file.type.startsWith('image/') || /\.(avif|bmp|gif|jpe?g|png|svg|webp)$/i.test(file.name);
 
@@ -105,13 +126,16 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
   const [icon, setIcon] = useState(initialSet?.icon || '🎴');
 
   // Available properties for multi-attribute matching (Requirement 3)
-  const initialAvailableProperties = initialSet?.availableProperties && initialSet.availableProperties.length >= 2
+  const initialAvailableProperties = initialSet?.availableProperties && initialSet.availableProperties.length >= 1
     ? initialSet.availableProperties
     : [
         { key: 'prop_1', label: '1. Vorderseite' },
         { key: 'prop_2', label: '2. Rückseite' },
       ];
   const [availableProperties, setAvailableProperties] = useState(initialAvailableProperties);
+  const [savedTemplates, setSavedTemplates] = useState<SavedSetTemplate[]>(loadSetTemplates);
+  const [saveTemplateName, setSaveTemplateName] = useState('');
+  const [selectedTemplateName, setSelectedTemplateName] = useState(() => loadSetTemplates()[0]?.name || '');
 
   const [initialImageData] = useState(() => prepareInitialImageData(initialSet, initialAvailableProperties));
   const [imageAssets, setImageAssets] = useState<SetImageAsset[]>(initialImageData.imageAssets);
@@ -153,9 +177,8 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
   };
 
   const handleAddProperty = () => {
-    if (availableProperties.length >= 6) return;
     const nextNum = availableProperties.length + 1;
-    const newKey = `prop_${Date.now().toString(36).substring(2, 6)}`;
+    const newKey = `prop_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
     setAvailableProperties((prev) => [
       ...prev,
       { key: newKey, label: `${nextNum}. Neue Eigenschaft` },
@@ -163,14 +186,26 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
   };
 
   const handleRemoveProperty = (keyToRemove: string) => {
-    if (availableProperties.length <= 2) return; // Min 2 properties
-    setAvailableProperties((prev) => prev.filter((p) => p.key !== keyToRemove));
+    setAvailableProperties((prev) => {
+      if (prev.length <= 1) return prev;
+      return prev.filter((p) => p.key !== keyToRemove);
+    });
   };
 
   const handleRenameProperty = (key: string, newLabel: string) => {
     setAvailableProperties((prev) =>
       prev.map((p) => (p.key === key ? { ...p, label: newLabel } : p))
     );
+    setPairs((prev) => prev.map((pair) => {
+      if (!pair.properties?.[key]) return pair;
+      return {
+        ...pair,
+        properties: {
+          ...pair.properties,
+          [key]: { ...pair.properties[key], label: newLabel },
+        },
+      };
+    }));
   };
 
   const addImageAsset = (content: string, name: string) => {
@@ -391,6 +426,53 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
     onPlayDirectly(currentSet);
   };
 
+  const handleSaveTemplate = () => {
+    const defaultName = `${category.trim() || 'Eigene Sammlung'} - ${title.trim() || 'Unbenanntes Set'}`;
+    const selectedName = (saveTemplateName.trim() || defaultName).trim();
+    if (!selectedName) return;
+    const template: SavedSetTemplate = {
+      name: selectedName,
+      category: category.trim(),
+      subcategory: subcategory.trim(),
+      description: description.trim(),
+      author: author.trim(),
+      icon: icon.trim() || '🎴',
+      availableProperties: availableProperties.map((property) => ({ ...property })),
+    };
+    const nextTemplates = [
+      ...savedTemplates.filter((item) => item.name !== selectedName),
+      template,
+    ];
+    localStorage.setItem(SET_TEMPLATES_KEY, JSON.stringify(nextTemplates));
+    setSavedTemplates(nextTemplates);
+    setSelectedTemplateName(selectedName);
+    setSaveTemplateName('');
+  };
+
+  const handleApplySavedTemplate = (template: SavedSetTemplate) => {
+    setCategory(template.category || 'Eigene Sammlung');
+    setSubcategory(template.subcategory || '');
+    setDescription(template.description || '');
+    setAuthor(template.author || '');
+    setIcon(template.icon || '🎴');
+    setAvailableProperties(template.availableProperties.map((property) => ({ ...property })));
+  };
+
+  const handleApplySelectedTemplate = () => {
+    const template = savedTemplates.find((item) => item.name === selectedTemplateName);
+    if (template) handleApplySavedTemplate(template);
+  };
+
+  const handleDeleteSelectedTemplate = () => {
+    const template = savedTemplates.find((item) => item.name === selectedTemplateName);
+    if (!template) return;
+    if (!window.confirm(`Vorlage „${template.name}“ wirklich löschen?`)) return;
+    const nextTemplates = savedTemplates.filter((item) => item.name !== selectedTemplateName);
+    localStorage.setItem(SET_TEMPLATES_KEY, JSON.stringify(nextTemplates));
+    setSavedTemplates(nextTemplates);
+    setSelectedTemplateName(nextTemplates[0]?.name || '');
+  };
+
   return (
     <div
       className="w-full min-w-0 max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6 flex flex-col gap-4 sm:gap-6"
@@ -415,7 +497,7 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
               {initialSet ? 'Kartenset bearbeiten' : 'Eigenes Multi-Eigenschaften-Set erstellen'}
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 break-words">
-              Definiere 2, 3 oder 4 Eigenschaften pro Karte (z.B. Strukturformel, Wirkstoffname, Klasse, Indikation)
+              Definiere beliebig viele Eigenschaften pro Karte (z.B. Strukturformel, Wirkstoffname, Klasse, Indikation)
             </p>
           </div>
         </div>
@@ -555,7 +637,7 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
                 Karteneigenschaften konfigurieren ({availableProperties.length} Eigenschaften)
               </h3>
               <p className="text-xs text-slate-600 dark:text-slate-400">
-                Lerne mit 2 bis 4 Karten pro Zug (z.B. Formel + Name + Klasse + Indikation)
+                  Die Eigenschaften werden je Karte frei konfiguriert; für Memory und verwandte Modi werden Kartenplätze begrenzt dargestellt.
               </p>
             </div>
           </div>
@@ -587,11 +669,25 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
             <button
               type="button"
               onClick={handleAddProperty}
-              disabled={availableProperties.length >= 6}
-              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-1 disabled:opacity-40 cursor-pointer shadow-xs"
+              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-1 cursor-pointer shadow-xs"
             >
               <Plus className="w-3 h-3" />
               <span>Eigenschaft</span>
+            </button>
+            <input
+              type="text"
+              value={saveTemplateName}
+              onChange={(event) => setSaveTemplateName(event.target.value)}
+              placeholder={`${category.trim() || 'Fachgebiet'} - ${title.trim() || 'Name des Kartensets'}`}
+              aria-label="Name der zu speichernden Vorlage"
+              className="min-w-32 flex-1 rounded-lg border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold text-slate-900 outline-none focus:ring-1 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+            />
+            <button
+              type="button"
+              onClick={handleSaveTemplate}
+              className="px-2.5 py-1 rounded-lg border border-violet-300 bg-violet-100 text-violet-950 font-bold hover:bg-violet-200 dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-300"
+            >
+              Als Vorlage speichern
             </button>
           </div>
         </div>
@@ -612,7 +708,7 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
                 onChange={(e) => handleRenameProperty(p.key, e.target.value)}
                 className="flex-1 text-xs font-bold text-slate-950 dark:text-slate-100 bg-transparent focus:outline-none focus:ring-1 focus:ring-emerald-500 rounded px-1"
               />
-              {availableProperties.length > 2 && (
+              {availableProperties.length > 1 && (
                 <button
                   type="button"
                   onClick={() => handleRemoveProperty(p.key)}
@@ -625,6 +721,44 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
             </div>
           ))}
         </div>
+        {savedTemplates.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 pt-3 dark:border-slate-800">
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Gespeicherte Vorlagen:</span>
+            <select
+              value={selectedTemplateName}
+              onChange={(event) => setSelectedTemplateName(event.target.value)}
+              aria-label="Gespeicherte Vorlage auswählen"
+              className="min-w-48 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-900 outline-none focus:ring-1 focus:ring-violet-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+            >
+              <option value="">Vorlage auswählen…</option>
+              {savedTemplates.map((template) => (
+                <option key={template.name} value={template.name}>
+                  {template.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={handleApplySelectedTemplate}
+              disabled={!selectedTemplateName}
+              title="Ausgewählte Vorlage anwenden"
+              aria-label="Ausgewählte Vorlage anwenden"
+              className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-xs transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <CheckCircle2 className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={handleDeleteSelectedTemplate}
+              disabled={!selectedTemplateName}
+              title="Ausgewählte Vorlage löschen"
+              aria-label="Ausgewählte Vorlage löschen"
+              className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-600 text-white shadow-xs transition-colors hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Global Drag & Drop Zone */}
@@ -986,6 +1120,26 @@ export const CustomSetEditor: React.FC<CustomSetEditorProps> = ({
 
           </div>
         ))}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-end gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900">
+        <button
+          type="button"
+          onClick={handleAddEmptyPair}
+          className="flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-900 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+        >
+          <Plus className="h-4 w-4" />
+          Konzept hinzufügen
+        </button>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={pairs.length === 0}
+          className="flex items-center gap-1.5 rounded-xl bg-slate-800 px-4 py-2 text-sm font-bold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-700 dark:hover:bg-slate-600"
+        >
+          <Save className="h-4 w-4" />
+          Speichern
+        </button>
       </div>
 
       {/* Math formula / image modal */}

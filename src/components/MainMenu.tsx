@@ -311,7 +311,7 @@ export const MainMenu: React.FC<MainMenuProps> = ({
                 <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 transition-transform group-hover:translate-x-0.5" />
               </div>
               <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
-                Eigenes Set mit bis zu 4 Eigenschaften & Formel-Generator erstellen.
+                Eigenes Set mit beliebig vielen Eigenschaften & Formel-Generator erstellen.
               </p>
             </button>
           </div>

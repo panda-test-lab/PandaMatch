@@ -51,6 +51,9 @@ function formatUpdatedAt(value?: string): string {
 
 type RepositoryMetadataStatus = {
   status: 'loading' | 'loaded' | 'error';
+  title?: string;
+  category?: string;
+  subcategory?: string;
   author?: string;
   description?: string;
   updatedAt?: string;
@@ -66,6 +69,7 @@ export function RepoSetImportModal({
   const [downloadingPath, setDownloadingPath] = useState<string | null>(null);
   const [metadataByPath, setMetadataByPath] = useState<Record<string, RepositoryMetadataStatus>>({});
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -99,6 +103,9 @@ export function RepoSetImportModal({
                   ...metadata,
                   [archive.path]: {
                     status: 'loaded',
+                    title: set.title,
+                    category: set.category,
+                    subcategory: set.subcategory,
                     author: set.author,
                     description: set.description,
                     updatedAt: set.updatedAt,
@@ -164,6 +171,22 @@ export function RepoSetImportModal({
     }
   };
 
+  const filteredArchives = archives.filter((archive) => {
+    const query = searchQuery.trim().normalize('NFKC').toLocaleLowerCase();
+    if (!query) return true;
+    const metadata = metadataByPath[archive.path];
+    const name = archiveFilename(archive.path).replace(/\.zip$/i, '');
+    return [
+      name,
+      archive.path,
+      metadata?.title,
+      metadata?.author,
+      metadata?.category,
+      metadata?.subcategory,
+      metadata?.description,
+    ].some((value) => value?.normalize('NFKC').toLocaleLowerCase().includes(query));
+  });
+
   return (
     <div
       role="dialog"
@@ -199,6 +222,17 @@ export function RepoSetImportModal({
         </header>
 
         <div className="overflow-y-auto p-4 sm:p-5">
+          <div className="mb-3">
+            <label htmlFor="repo-set-search" className="sr-only">Repository-Sets suchen</label>
+            <input
+              id="repo-set-search"
+              type="search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Nach Autor, Name, Fachgebiet, Teilgebiet oder Beschreibung suchen"
+              className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-sky-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+            />
+          </div>
           {isLoading && (
             <div className="flex items-center justify-center gap-2 py-12 text-sm text-slate-500">
               <LoaderCircle className="h-5 w-5 animate-spin" />
@@ -219,8 +253,14 @@ export function RepoSetImportModal({
             </div>
           )}
 
+          {!isLoading && archives.length > 0 && filteredArchives.length === 0 && (
+            <p className="py-12 text-center text-sm text-slate-500 dark:text-slate-400">
+              Keine Sets entsprechen der Suche.
+            </p>
+          )}
+
           <ul className="space-y-2">
-            {archives.map((archive) => {
+            {filteredArchives.map((archive) => {
               const installed = findInstalledSet(archive, allSets);
               const isCurrent = installed?.sourceArchiveSha === archive.sha;
               const isDownloading = downloadingPath === archive.path;

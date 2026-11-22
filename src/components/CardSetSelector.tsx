@@ -82,7 +82,8 @@ export const CardSetSelector: React.FC<CardSetSelectorProps> = ({
       const matchDesc = set.description.toLowerCase().includes(q);
       const matchCat = set.category.toLowerCase().includes(q);
       const matchSubcategory = set.subcategory?.toLowerCase().includes(q) ?? false;
-      return matchTitle || matchDesc || matchCat || matchSubcategory;
+      const matchAuthor = set.author?.toLowerCase().includes(q) ?? false;
+      return matchTitle || matchDesc || matchCat || matchSubcategory || matchAuthor;
     }
     return true;
   });

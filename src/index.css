@@ -183,3 +183,18 @@
 .animate-scale-up {
   animation: scaleUp 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
+/* Keep KaTeX content visually consistent with surrounding normal text. */
+.latex-renderer,
+.latex-renderer .katex,
+.latex-renderer .katex-display {
+  font-size: inherit !important;
+  line-height: inherit !important;
+  letter-spacing: inherit !important;
+  text-shadow: none !important;
+  font-weight: inherit !important;
+}
+
+.latex-renderer .katex {
+  text-indent: 0;
+  white-space: normal;
+}
